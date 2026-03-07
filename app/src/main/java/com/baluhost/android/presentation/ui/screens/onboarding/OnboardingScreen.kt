@@ -159,6 +159,7 @@ fun OnboardingScreen(
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF38BDF8) // sky-400
                     ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                     modifier = Modifier.height(48.dp)
                 ) {
                     Text(
@@ -287,6 +288,7 @@ private fun QrScanStep(onNavigateToQrScanner: () -> Unit) {
             colors = ButtonDefaults.buttonColors(
                 containerColor = Color(0xFF6366F1)
             ),
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             modifier = Modifier
                 .fillMaxWidth()
                 .height(56.dp)
@@ -649,7 +651,8 @@ private fun PermissionCard(
                     onClick = onClick,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFFA855F7)
-                    )
+                    ),
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
                 ) {
                     Text("Erlauben")
                 }

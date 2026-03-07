@@ -270,6 +270,7 @@ private fun OperationCard(
                     if (operation.canRetry) {
                         Button(
                             onClick = onRetry,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = Sky400,
                                 contentColor = Slate950

@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.Color
 // Slate Colors (Background & Surfaces)
 val Slate950 = Color(0xFF0F172A) // Main background
 val Slate900 = Color(0xFF1E293B) // Secondary background
-val Slate800 = Color(0xFF1E293B) // Card backgrounds
+val Slate800 = Color(0xFF1E293B) // Card backgrounds (Tailwind slate-800)
 val Slate700 = Color(0xFF334155) // Elevated surfaces
 val Slate600 = Color(0xFF475569) // Dividers
 val Slate500 = Color(0xFF64748B) // Disabled text
@@ -34,6 +34,7 @@ val Indigo400 = Color(0xFF818CF8)
 val Indigo500 = Color(0xFF6366F1) // Main secondary
 val Indigo600 = Color(0xFF4F46E5)
 val Indigo700 = Color(0xFF4338CA)
+val Indigo950 = Color(0xFF1E1B4B) // Webapp background gradient
 
 // Accent Colors (Violet)
 val Violet400 = Color(0xFFA78BFA)
@@ -61,6 +62,9 @@ val Yellow600 = Color(0xFFD97706)
 val Orange400 = Color(0xFFFB923C)
 val Orange500 = Color(0xFFF97316) // Orange accent
 val Orange600 = Color(0xFFEA580C)
+
+// Dark Overlays
+val Slate950_80 = Color(0xCC0F172A) // 80% opacity dark overlay
 
 // Glassmorphism Effects
 val GlassLight = Color(0x1AFFFFFF) // 10% white

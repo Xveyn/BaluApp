@@ -97,6 +97,7 @@ fun VpnStatusBanner(
                     // Connect VPN Button
                     Button(
                         onClick = onConnectVpn,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFFF9800),
                             contentColor = Color.White

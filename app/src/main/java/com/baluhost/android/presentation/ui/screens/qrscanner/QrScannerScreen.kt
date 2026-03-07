@@ -13,8 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -31,6 +35,7 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import org.json.JSONObject
 import java.util.concurrent.Executors
 
 /**
@@ -93,8 +98,8 @@ fun QrScannerScreen(
                     )
                 }
                 uiState is QrScannerState.Scanning -> {
-                    // Show camera preview
-                    CameraPreview(
+                    // Show camera preview with manual input fallback
+                    ScanningContent(
                         onQrCodeScanned = viewModel::onQrCodeScanned
                     )
                 }
@@ -144,110 +149,279 @@ private fun CameraPermissionRequest(
         
         Spacer(modifier = Modifier.height(32.dp))
         
-        Button(onClick = onRequestPermission) {
+        Button(
+            onClick = onRequestPermission,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
+        ) {
             Text("Grant Permission")
         }
     }
 }
 
 @Composable
-private fun CameraPreview(
+private fun ScanningContent(
     onQrCodeScanned: (String) -> Unit
+) {
+    var cameraError by remember { mutableStateOf(false) }
+    var showManualInput by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        if (cameraError) {
+            CameraErrorFallback(
+                onManualInput = { showManualInput = true }
+            )
+        } else {
+            CameraPreview(
+                onQrCodeScanned = onQrCodeScanned,
+                onCameraError = { cameraError = true }
+            )
+        }
+
+        // "Manuell eingeben" button — always visible at the bottom
+        if (!cameraError) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 32.dp, vertical = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text(
+                        text = "Point camera at QR code",
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(16.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = { showManualInput = true }) {
+                    Icon(
+                        imageVector = Icons.Default.Keyboard,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Server-URL manuell eingeben")
+                }
+            }
+        }
+    }
+
+    if (showManualInput) {
+        ManualInputDialog(
+            onDismiss = { showManualInput = false },
+            onConnect = { serverUrl, token ->
+                showManualInput = false
+                val json = JSONObject().apply {
+                    put("server", serverUrl)
+                    put("token", token)
+                }.toString()
+                onQrCodeScanned(json)
+            }
+        )
+    }
+}
+
+@Composable
+private fun CameraPreview(
+    onQrCodeScanned: (String) -> Unit,
+    onCameraError: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraProviderFuture = remember { ProcessCameraProvider.getInstance(context) }
-    
+
     var hasScanned by remember { mutableStateOf(false) }
-    
-    Box(modifier = Modifier.fillMaxSize()) {
-        AndroidView(
-            factory = { ctx ->
-                val previewView = PreviewView(ctx)
-                val executor = Executors.newSingleThreadExecutor()
-                
-                cameraProviderFuture.addListener({
-                    val cameraProvider = cameraProviderFuture.get()
-                    
-                    val preview = Preview.Builder().build().also {
-                        it.setSurfaceProvider(previewView.surfaceProvider)
-                    }
-                    
-                    val imageAnalysis = ImageAnalysis.Builder()
-                        .setTargetResolution(Size(1280, 720))
-                        .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                        .build()
-                    
-                    val barcodeScanner = BarcodeScanning.getClient()
-                    
-                    imageAnalysis.setAnalyzer(executor) { imageProxy ->
-                        val mediaImage = imageProxy.image
-                        if (mediaImage != null && !hasScanned) {
-                            val image = InputImage.fromMediaImage(
-                                mediaImage,
-                                imageProxy.imageInfo.rotationDegrees
-                            )
-                            
-                            barcodeScanner.process(image)
-                                .addOnSuccessListener { barcodes ->
-                                    for (barcode in barcodes) {
-                                        if (barcode.format == Barcode.FORMAT_QR_CODE) {
-                                            barcode.rawValue?.let { qrData ->
-                                                hasScanned = true
-                                                onQrCodeScanned(qrData)
-                                            }
-                                            break
+
+    AndroidView(
+        factory = { ctx ->
+            val previewView = PreviewView(ctx)
+            val executor = Executors.newSingleThreadExecutor()
+
+            cameraProviderFuture.addListener({
+                val cameraProvider = cameraProviderFuture.get()
+
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
+
+                val imageAnalysis = ImageAnalysis.Builder()
+                    .setTargetResolution(Size(1280, 720))
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+
+                val barcodeScanner = BarcodeScanning.getClient()
+
+                imageAnalysis.setAnalyzer(executor) { imageProxy ->
+                    val mediaImage = imageProxy.image
+                    if (mediaImage != null && !hasScanned) {
+                        val image = InputImage.fromMediaImage(
+                            mediaImage,
+                            imageProxy.imageInfo.rotationDegrees
+                        )
+
+                        barcodeScanner.process(image)
+                            .addOnSuccessListener { barcodes ->
+                                for (barcode in barcodes) {
+                                    if (barcode.format == Barcode.FORMAT_QR_CODE) {
+                                        barcode.rawValue?.let { qrData ->
+                                            hasScanned = true
+                                            onQrCodeScanned(qrData)
                                         }
+                                        break
                                     }
                                 }
-                                .addOnCompleteListener {
-                                    imageProxy.close()
-                                }
-                        } else {
-                            imageProxy.close()
-                        }
+                            }
+                            .addOnCompleteListener {
+                                imageProxy.close()
+                            }
+                    } else {
+                        imageProxy.close()
                     }
-                    
-                    val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-                    
-                    try {
-                        cameraProvider.unbindAll()
-                        cameraProvider.bindToLifecycle(
-                            lifecycleOwner,
-                            cameraSelector,
-                            preview,
-                            imageAnalysis
-                        )
-                    } catch (e: Exception) {
-                        // Camera binding failed
-                    }
-                }, ContextCompat.getMainExecutor(ctx))
-                
-                previewView
-            },
-            modifier = Modifier.fillMaxSize()
+                }
+
+                val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+
+                try {
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageAnalysis
+                    )
+                } catch (e: Exception) {
+                    onCameraError()
+                }
+            }, ContextCompat.getMainExecutor(ctx))
+
+            previewView
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+@Composable
+private fun CameraErrorFallback(
+    onManualInput: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.error,
+            modifier = Modifier.size(64.dp)
         )
-        
-        // Overlay with instructions
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Text(
+            text = "Kamera nicht verfügbar",
+            style = MaterialTheme.typography.headlineSmall,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+            text = "Die Kamera konnte nicht gestartet werden. Du kannst die Server-Daten auch manuell eingeben.",
+            style = MaterialTheme.typography.bodyMedium,
+            textAlign = TextAlign.Center
+        )
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Button(
+            onClick = onManualInput,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            )
         ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-                shape = MaterialTheme.shapes.medium
-            ) {
-                Text(
-                    text = "Point camera at QR code",
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
+            Icon(
+                imageVector = Icons.Default.Keyboard,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Server-URL manuell eingeben")
         }
     }
+}
+
+@Composable
+private fun ManualInputDialog(
+    onDismiss: () -> Unit,
+    onConnect: (serverUrl: String, token: String) -> Unit
+) {
+    var serverUrl by remember { mutableStateOf("") }
+    var token by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Server manuell verbinden") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Gib die Server-URL und das Registrierungs-Token ein, die du vom Server-Admin erhalten hast.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = { serverUrl = it },
+                    label = { Text("Server-URL") },
+                    placeholder = { Text("https://server.example.com") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = token,
+                    onValueChange = { token = it },
+                    label = { Text("Registrierungs-Token") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConnect(serverUrl.trim(), token.trim()) },
+                enabled = serverUrl.isNotBlank() && token.isNotBlank(),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary
+                )
+            ) {
+                Text("Verbinden")
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+            ) {
+                Text("Abbrechen")
+            }
+        }
+    )
 }
 
 @Composable
@@ -341,7 +515,14 @@ private fun ErrorOverlay(
                 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                Button(onClick = onRetry) {
+                Button(
+                    onClick = onRetry,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                ) {
                     Text("Try Again")
                 }
             }

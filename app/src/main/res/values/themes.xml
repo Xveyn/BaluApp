@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Base application theme - Compose überschreibt dies sowieso -->
-    <style name="Theme.BaluHost" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.BaluHost" parent="Theme.AppCompat.Light.NoActionBar">
     </style>
 </resources>
