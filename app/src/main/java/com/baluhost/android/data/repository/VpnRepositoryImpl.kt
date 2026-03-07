@@ -9,6 +9,7 @@ import com.baluhost.android.domain.model.VpnClient
 import com.baluhost.android.domain.model.VpnConfig
 import com.baluhost.android.domain.repository.VpnRepository
 import com.baluhost.android.util.Result
+import com.baluhost.android.util.WireGuardConfigParser
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
@@ -27,6 +28,8 @@ class VpnRepositoryImpl @Inject constructor(
         
         val response = vpnApi.generateConfig(GenerateVpnConfigRequest("Android Device"))
         
+        val parsed = WireGuardConfigParser.parse(response.config)
+
         val vpnConfig = VpnConfig(
             clientId = response.client.id,
             deviceName = response.client.deviceName,
@@ -34,17 +37,17 @@ class VpnRepositoryImpl @Inject constructor(
             assignedIp = response.client.assignedIp,
             configString = response.config,
             configBase64 = response.configBase64,
-            serverPublicKey = "", // From server config if needed
-            serverEndpoint = "", // Parsed from config
-            serverPort = 51820, // Default WireGuard port
+            serverPublicKey = parsed.serverPublicKey,
+            serverEndpoint = parsed.serverEndpoint,
+            serverPort = parsed.serverPort,
             isActive = response.client.isActive,
             createdAt = response.client.createdAt,
             lastHandshake = response.client.lastHandshake
         )
-        
+
         // Save to local storage
         saveVpnConfig(vpnConfig)
-        
+
         Log.d(TAG, "VPN config fetched and saved successfully")
         Result.Success(vpnConfig)
         
@@ -65,7 +68,8 @@ class VpnRepositoryImpl @Inject constructor(
         Log.d(TAG, "Generating new VPN config for device: $deviceName")
         
         val response = vpnApi.generateConfig(GenerateVpnConfigRequest(deviceName))
-        
+        val parsed = WireGuardConfigParser.parse(response.config)
+
         val vpnConfig = VpnConfig(
             clientId = response.client.id,
             deviceName = response.client.deviceName,
@@ -73,9 +77,9 @@ class VpnRepositoryImpl @Inject constructor(
             assignedIp = response.client.assignedIp,
             configString = response.config,
             configBase64 = response.configBase64,
-            serverPublicKey = "",
-            serverEndpoint = "",
-            serverPort = 51820,
+            serverPublicKey = parsed.serverPublicKey,
+            serverEndpoint = parsed.serverEndpoint,
+            serverPort = parsed.serverPort,
             isActive = response.client.isActive,
             createdAt = response.client.createdAt,
             lastHandshake = response.client.lastHandshake
@@ -116,6 +120,7 @@ class VpnRepositoryImpl @Inject constructor(
             if (configString.isNullOrEmpty()) {
                 null
             } else {
+                val parsed = WireGuardConfigParser.parse(configString)
                 VpnConfig(
                     clientId = preferencesManager.getVpnClientId().first() ?: 0,
                     deviceName = preferencesManager.getVpnDeviceName().first() ?: "Unknown",
@@ -123,9 +128,9 @@ class VpnRepositoryImpl @Inject constructor(
                     assignedIp = preferencesManager.getVpnAssignedIp().first() ?: "",
                     configString = configString,
                     configBase64 = null,
-                    serverPublicKey = "",
-                    serverEndpoint = "",
-                    serverPort = 51820,
+                    serverPublicKey = parsed.serverPublicKey,
+                    serverEndpoint = parsed.serverEndpoint,
+                    serverPort = parsed.serverPort,
                     isActive = true
                 )
             }

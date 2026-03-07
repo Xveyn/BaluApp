@@ -147,10 +147,7 @@ class SyncRepositoryImpl @Inject constructor(
         }
     }
     
-    /**
-     * List remote files in a folder.
-     */
-    suspend fun listRemoteFiles(folderId: Long, remotePath: String): List<RemoteFileInfo> {
+    override suspend fun listRemoteFiles(folderId: Long, remotePath: String): List<RemoteFileInfo> {
         return try {
             val response = syncApi.listRemoteFiles(folderId.toString(), remotePath)
             response.files.map { it.toDomain() }
@@ -159,10 +156,7 @@ class SyncRepositoryImpl @Inject constructor(
         }
     }
     
-    /**
-     * Upload a file (for small files).
-     */
-    suspend fun uploadFile(
+    override suspend fun uploadFile(
         folderId: Long,
         remotePath: String,
         file: okhttp3.MultipartBody.Part
@@ -203,10 +197,7 @@ class SyncRepositoryImpl @Inject constructor(
         syncApi.cancelChunkedUpload(uploadId)
     }
     
-    /**
-     * Download a file.
-     */
-    suspend fun downloadFile(
+    override suspend fun downloadFile(
         folderId: Long,
         remotePath: String
     ): okhttp3.ResponseBody {

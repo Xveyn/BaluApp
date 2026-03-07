@@ -27,7 +27,7 @@ class ErrorInterceptor @Inject constructor() : Interceptor {
             if (!response.isSuccessful) {
                 // Try to peek the body, but handle if it's already consumed
                 val errorMessage = try {
-                    val errorBody = response.peekBody(Long.MAX_VALUE).string()
+                    val errorBody = response.peekBody(4096).string()
                     
                     // Try to parse error response
                     try {
