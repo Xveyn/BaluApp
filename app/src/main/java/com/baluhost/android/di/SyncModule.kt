@@ -3,10 +3,9 @@ package com.baluhost.android.di
 import android.content.Context
 import com.baluhost.android.data.sync.SAFStorageAdapter
 import com.baluhost.android.data.sync.SmbAdapter
-import com.baluhost.android.data.sync.SyncRepositoryImpl
+import com.baluhost.android.data.sync.LocalStorageRepositoryImpl
 import com.baluhost.android.data.sync.WebDavAdapter
-import com.baluhost.android.domain.adapter.CloudAdapter
-import com.baluhost.android.domain.repo.SyncRepository
+import com.baluhost.android.domain.repo.LocalStorageRepository
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,7 +22,7 @@ object SyncModule {
 
     @Provides
     @Singleton
-    fun provideSyncRepository(context: Context, helper: com.baluhost.android.data.sync.ExternalStorageHelper): SyncRepository = SyncRepositoryImpl(context, helper)
+    fun provideLocalStorageRepository(context: Context, helper: com.baluhost.android.data.sync.ExternalStorageHelper): LocalStorageRepository = LocalStorageRepositoryImpl(context, helper)
 
     @Provides
     @Singleton

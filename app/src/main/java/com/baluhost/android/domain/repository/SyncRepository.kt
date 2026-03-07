@@ -75,4 +75,19 @@ interface SyncRepository {
      * Retry a failed upload.
      */
     suspend fun retryUpload(uploadId: String): Result<UploadQueueItem>
+
+    /**
+     * List remote files in a sync folder.
+     */
+    suspend fun listRemoteFiles(folderId: Long, remotePath: String): List<RemoteFileInfo>
+
+    /**
+     * Upload a file to a sync folder.
+     */
+    suspend fun uploadFile(folderId: Long, remotePath: String, file: okhttp3.MultipartBody.Part)
+
+    /**
+     * Download a file from a sync folder.
+     */
+    suspend fun downloadFile(folderId: Long, remotePath: String): okhttp3.ResponseBody
 }

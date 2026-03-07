@@ -35,8 +35,8 @@ class AppLockManager @Inject constructor(
     companion object {
         private const val TAG = "AppLockManager"
         
-        // Default auto-lock timeout: 10 seconds (for testing - should be 5 minutes in production)
-        const val DEFAULT_TIMEOUT_MILLIS = 10 * 1000L
+        // Default auto-lock timeout: 5 minutes
+        const val DEFAULT_TIMEOUT_MILLIS = 5 * 60 * 1000L
         
         // Keys
         private val KEY_LAST_BACKGROUND_TIME = longPreferencesKey("last_background_time")
@@ -69,7 +69,7 @@ class AppLockManager @Inject constructor(
      * 
      * Best Practice:
      * - If app process was killed (fresh start) → ALWAYS show lock
-     * - If app was just in background → show lock after timeout (10 seconds)
+     * - If app was just in background → show lock after timeout (5 minutes)
      * 
      * @return true if lock screen should be shown
      */

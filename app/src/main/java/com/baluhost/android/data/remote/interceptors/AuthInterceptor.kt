@@ -5,6 +5,7 @@ import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.AuthApi
 import com.baluhost.android.data.remote.dto.RefreshTokenRequest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.Interceptor
 import okhttp3.Response
@@ -33,8 +34,8 @@ class AuthInterceptor @Inject constructor(
         }
         
         // Add access token and device ID to request
-        val token = runBlocking { preferencesManager.getAccessToken().first() }
-        val deviceId = runBlocking { preferencesManager.getDeviceId().first() }
+        val token = runBlocking(Dispatchers.IO) { preferencesManager.getAccessToken().first() }
+        val deviceId = runBlocking(Dispatchers.IO) { preferencesManager.getDeviceId().first() }
         
         val requestBuilder = request.newBuilder()
         
@@ -58,7 +59,7 @@ class AuthInterceptor @Inject constructor(
             
             synchronized(this) {
                 // Check if token was refreshed by another thread
-                val currentToken = runBlocking { preferencesManager.getAccessToken().first() }
+                val currentToken = runBlocking(Dispatchers.IO) { preferencesManager.getAccessToken().first() }
                 if (currentToken != token) {
                     // Token was refreshed, retry with new token
                     return chain.proceed(
@@ -69,15 +70,15 @@ class AuthInterceptor @Inject constructor(
                 }
                 
                 // Attempt to refresh token
-                val refreshToken = runBlocking { preferencesManager.getRefreshToken().first() }
+                val refreshToken = runBlocking(Dispatchers.IO) { preferencesManager.getRefreshToken().first() }
                 if (refreshToken != null) {
                     try {
-                        val refreshResponse = runBlocking {
+                        val refreshResponse = runBlocking(Dispatchers.IO) {
                             authApi.get().refreshToken(RefreshTokenRequest(refreshToken))
                         }
                         
                         // Save new access token
-                        runBlocking {
+                        runBlocking(Dispatchers.IO) {
                             preferencesManager.saveAccessToken(refreshResponse.accessToken)
                         }
                         
@@ -102,7 +103,7 @@ class AuthInterceptor @Inject constructor(
                         if (!isConnectionError) {
                             // Clear tokens only for real auth errors (invalid refresh token, etc.)
                             Log.w(TAG, "Authentication failed - clearing tokens")
-                            runBlocking {
+                            runBlocking(Dispatchers.IO) {
                                 preferencesManager.clearTokens()
                             }
                         } else {
@@ -111,7 +112,7 @@ class AuthInterceptor @Inject constructor(
                     }
                 } else {
                     Log.w(TAG, "No refresh token available - clearing tokens")
-                    runBlocking {
+                    runBlocking(Dispatchers.IO) {
                         preferencesManager.clearTokens()
                     }
                 }

@@ -2,6 +2,7 @@ package com.baluhost.android.data.remote.interceptors
 
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -23,7 +24,7 @@ class DynamicBaseUrlInterceptor @Inject constructor(
         val originalUrl = originalRequest.url
         
         // Get server URL from preferences (blocking since we're in interceptor)
-        val serverUrl = runBlocking {
+        val serverUrl = runBlocking(Dispatchers.IO) {
             preferencesManager.getServerUrl().first()
         }
         
