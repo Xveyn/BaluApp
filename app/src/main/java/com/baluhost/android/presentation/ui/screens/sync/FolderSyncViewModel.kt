@@ -85,6 +85,26 @@ class FolderSyncViewModel @Inject constructor(
         }
     }
     
+    fun refreshSyncFolders() {
+        viewModelScope.launch {
+            try {
+                val deviceId = preferencesManager.getDeviceId().first()
+                    ?: throw Exception("Device ID not found")
+                val foldersResult = syncRepository.getSyncFolders(deviceId)
+                if (foldersResult.isFailure) return@launch
+                val folders = foldersResult.getOrNull() ?: emptyList()
+                val queueResult = syncRepository.getUploadQueue(deviceId)
+                val uploadQueue = queueResult.getOrNull() ?: emptyList()
+                _uiState.value = FolderSyncState.Success(
+                    folders = folders,
+                    uploadQueue = uploadQueue
+                )
+            } catch (_: Exception) {
+                // Silently fail on refresh - keep existing data visible
+            }
+        }
+    }
+
     fun createFolder(config: SyncFolderCreateConfig) {
         viewModelScope.launch {
             try {

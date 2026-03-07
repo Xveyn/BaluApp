@@ -6,6 +6,7 @@ import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.model.VpnConfig
 import com.baluhost.android.util.Result
+import com.baluhost.android.util.WireGuardConfigParser
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 
@@ -57,51 +58,16 @@ class ImportVpnConfigUseCase @Inject constructor(
     }
     
     private fun parseWireGuardConfig(configString: String): VpnConfig {
-        val lines = configString.lines()
-        var clientId = 0
-        var deviceName = ""
-        var publicKey = ""
-        var assignedIp = ""
-        var serverPublicKey = ""
-        var serverEndpoint = ""
-        var serverPort = 51820
-        
-        var currentSection = ""
-        for (line in lines) {
-            val trimmed = line.trim()
-            when {
-                trimmed.startsWith("[") -> currentSection = trimmed
-                currentSection == "[Interface]" -> {
-                    when {
-                        trimmed.startsWith("Address") -> {
-                            assignedIp = trimmed.substringAfter("=").trim().substringBefore("/")
-                        }
-                    }
-                }
-                currentSection == "[Peer]" -> {
-                    when {
-                        trimmed.startsWith("PublicKey") -> {
-                            serverPublicKey = trimmed.substringAfter("=").trim()
-                        }
-                        trimmed.startsWith("Endpoint") -> {
-                            val endpoint = trimmed.substringAfter("=").trim()
-                            serverEndpoint = endpoint.substringBefore(":")
-                            serverPort = endpoint.substringAfter(":").toIntOrNull() ?: 51820
-                        }
-                    }
-                }
-            }
-        }
-        
+        val parsed = WireGuardConfigParser.parse(configString)
         return VpnConfig(
-            clientId = clientId,
-            deviceName = deviceName,
-            publicKey = publicKey,
-            assignedIp = assignedIp,
+            clientId = 0,
+            deviceName = "",
+            publicKey = "",
+            assignedIp = parsed.assignedIp,
             configString = configString,
-            serverPublicKey = serverPublicKey,
-            serverEndpoint = serverEndpoint,
-            serverPort = serverPort
+            serverPublicKey = parsed.serverPublicKey,
+            serverEndpoint = parsed.serverEndpoint,
+            serverPort = parsed.serverPort
         )
     }
     

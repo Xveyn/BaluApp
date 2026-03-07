@@ -95,7 +95,7 @@ fun FolderSyncScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Slate900
+                    containerColor = Color.Transparent
                 )
             )
         },
@@ -137,8 +137,8 @@ fun FolderSyncScreen(
                     // Handle refresh state changes
                     LaunchedEffect(isRefreshing) {
                         if (isRefreshing) {
-                            viewModel.loadSyncFolders()
-                            delay(1000)  // Simulate network delay
+                            viewModel.refreshSyncFolders()
+                            delay(1000)
                             isRefreshing = false
                         }
                     }
@@ -226,10 +226,24 @@ fun FolderSyncScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { webDavVm.testCredentials(wdUsername.ifBlank { null }, wdPassword.ifBlank { null }) }) {
+                        Button(
+                            onClick = { webDavVm.testCredentials(wdUsername.ifBlank { null }, wdPassword.ifBlank { null }) },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Indigo500,
+                                contentColor = Color.White
+                            )
+                        ) {
                             Text("Test Credentials")
                         }
-                        Button(onClick = { webDavVm.listRemote(wdPath, wdUsername.ifBlank { null }, wdPassword.ifBlank { null }) }) {
+                        Button(
+                            onClick = { webDavVm.listRemote(wdPath, wdUsername.ifBlank { null }, wdPassword.ifBlank { null }) },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Sky500,
+                                contentColor = Slate950
+                            )
+                        ) {
                             Text("List")
                         }
                     }
@@ -253,13 +267,20 @@ fun FolderSyncScreen(
                                         Text(item.name, color = Slate100)
                                         Text("${item.size} bytes", style = MaterialTheme.typography.bodySmall, color = Slate300)
                                     }
-                                    Button(onClick = {
-                                        // select this remote path and open config dialog
-                                        selectedFolderUri = Uri.parse(item.uri)
-                                        selectedFolderName = item.name
-                                        showWebDavDialog = false
-                                        showConfigDialog = true
-                                    }) {
+                                    Button(
+                                        onClick = {
+                                            // select this remote path and open config dialog
+                                            selectedFolderUri = Uri.parse(item.uri)
+                                            selectedFolderName = item.name
+                                            showWebDavDialog = false
+                                            showConfigDialog = true
+                                        },
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = Sky500,
+                                            contentColor = Slate950
+                                        )
+                                    ) {
                                         Text("Select")
                                     }
                                 }
@@ -317,15 +338,20 @@ fun FolderSyncScreen(
                     onClick = {
                         permissionLauncher.launch(PermissionHelper.getStoragePermissions())
                     },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Sky500
+                        containerColor = Sky500,
+                        contentColor = Slate950
                     )
                 ) {
                     Text("Berechtigung erteilen")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showPermissionDialog = false }) {
+                TextButton(
+                    onClick = { showPermissionDialog = false },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+                ) {
                     Text("Später", color = Slate400)
                 }
             },
@@ -773,8 +799,13 @@ private fun SyncFolderCard(
                 onClick = onSync,
                 enabled = folder.syncStatus != SyncStatus.SYNCING,
                 modifier = Modifier.weight(1f),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = Sky400
+                ),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (folder.syncStatus != SyncStatus.SYNCING) Sky400.copy(alpha = 0.5f) else Slate700
                 )
             ) {
                 Icon(
@@ -820,16 +851,21 @@ private fun SyncFolderCard(
                         onDelete()
                         showDeleteDialog = false
                     },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Red500
+                        containerColor = Red500,
+                        contentColor = Color.White
                     )
                 ) {
                     Text("Entfernen")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Abbrechen")
+                TextButton(
+                    onClick = { showDeleteDialog = false },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
+                ) {
+                    Text("Abbrechen", color = Slate400)
                 }
             },
             containerColor = Slate900
@@ -960,8 +996,10 @@ private fun ErrorContent(
         Spacer(modifier = Modifier.height(24.dp))
         Button(
             onClick = onRetry,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             colors = ButtonDefaults.buttonColors(
-                containerColor = Sky500
+                containerColor = Sky500,
+                contentColor = Slate950
             )
         ) {
             Text("Erneut versuchen")
