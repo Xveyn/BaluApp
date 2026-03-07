@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(gh api:*)",
+      "Bash(grep:*)",
+      "Bash(./gradlew testDebugUnitTest:*)",
+      "Bash(./gradlew compileDebugKotlin:*)",
+      "Bash(where adb)",
+      "Read(//f/Programme \\(x86\\)/BaluApp/$LOCALAPPDATA/Android/Sdk/platform-tools/**)",
+      "Read(//f/Programme \\(x86\\)/BaluApp/$HOME/AppData/Local/Android/Sdk/platform-tools/**)",
+      "Bash(\"$ADB\" logcat:*)",
+      "Bash(\"C:/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/adb.exe\" logcat:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Read(//c/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/**)",
+      "Read(//c/Users/SvenB/**)",
+      "Bash(\"C:/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/adb.exe\":*)",
+      "Bash(\"C:/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/adb.exe\" install:*)",
+      "Bash(\"C:/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/adb.exe\" devices:*)"
+    ]
+  }
+}
