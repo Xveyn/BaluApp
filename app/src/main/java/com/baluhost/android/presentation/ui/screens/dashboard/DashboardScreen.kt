@@ -2,6 +2,7 @@ package com.baluhost.android.presentation.ui.screens.dashboard
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +17,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.domain.model.FileItem
+import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
@@ -43,6 +44,7 @@ fun DashboardScreen(
     onNavigateToFiles: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToVpn: () -> Unit = {},
+    onNavigateToSync: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -52,17 +54,6 @@ fun DashboardScreen(
     val hasVpnConfig by viewModel.hasVpnConfig.collectAsState()
     val vpnBannerDismissed by viewModel.vpnBannerDismissed.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
-    
-    // Gradient background from dark blue to teal
-    val gradientBrush = Brush.linearGradient(
-        colors = listOf(
-            Color(0xFF1E3A5F), // Dark blue
-            Color(0xFF2C5F6F), // Mid blue-teal
-            Color(0xFF1A4D5C)  // Teal
-        ),
-        start = Offset(0f, 0f),
-        end = Offset(1000f, 1500f)
-    )
     
     Scaffold(
         topBar = {
@@ -135,11 +126,7 @@ fun DashboardScreen(
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradientBrush)
-        ) {
+        BaluBackground {
             if (uiState.isLoading) {
                 Box(
                     modifier = Modifier
@@ -177,7 +164,13 @@ fun DashboardScreen(
                         onDismiss = { viewModel.dismissVpnBanner() },
                         isDismissed = vpnBannerDismissed
                     )
-                    
+
+                    // Server Status Strip
+                    ServerStatusStrip(
+                        isOnline = uiState.telemetry != null,
+                        uptimeSeconds = uiState.telemetry?.uptime?.toLong()
+                    )
+
                     // System Metrics Grid - 2x2 layout like webapp
                     val telemetry = uiState.telemetry
                     Column(
@@ -243,6 +236,14 @@ fun DashboardScreen(
                         }
                     }
                     
+                    // Sync Summary Card
+                    SyncSummaryCard(
+                        pendingCount = uiState.pendingSyncCount,
+                        failedCount = uiState.failedSyncCount,
+                        activeCount = uiState.activeSyncFolders,
+                        onDetailsClick = onNavigateToSync
+                    )
+
                     // RAID Arrays Section
                     if (uiState.raidArrays.isNotEmpty()) {
                         GlassCard(
@@ -653,4 +654,214 @@ private fun RecentFileItem(file: FileItem) {
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
     return sdf.format(Date(timestamp * 1000))
+}
+
+@Composable
+private fun ServerStatusStrip(
+    isOnline: Boolean,
+    uptimeSeconds: Long?
+) {
+    var showPowerDialog by remember { mutableStateOf(false) }
+
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+        intensity = GlassIntensity.Light,
+        shape = RoundedCornerShape(16.dp),
+        padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(10.dp)
+                        .background(
+                            if (isOnline) Green500 else Red500,
+                            CircleShape
+                        )
+                )
+                Text(
+                    text = if (isOnline) "Server Online" else "Server Offline",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White
+                )
+                if (isOnline && uptimeSeconds != null) {
+                    Text(
+                        text = formatUptimeCompact(uptimeSeconds),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
+                    )
+                }
+            }
+            IconButton(
+                onClick = { showPowerDialog = true },
+                modifier = Modifier.size(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PowerSettingsNew,
+                    contentDescription = "Power settings",
+                    tint = Slate400,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+
+    if (showPowerDialog) {
+        AlertDialog(
+            onDismissRequest = { showPowerDialog = false },
+            confirmButton = {
+                TextButton(onClick = { showPowerDialog = false }) {
+                    Text("OK", color = Sky400)
+                }
+            },
+            title = {
+                Text(
+                    "Power Management",
+                    color = Color.White,
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Text(
+                    "Stromverwaltung wird in einem zukünftigen Update verfügbar.",
+                    color = Slate400
+                )
+            },
+            containerColor = Slate900,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+}
+
+private fun formatUptimeCompact(seconds: Long): String {
+    val days = seconds / 86400
+    val hours = (seconds % 86400) / 3600
+    return "${days}d ${hours}h"
+}
+
+@Composable
+private fun SyncSummaryCard(
+    pendingCount: Int,
+    failedCount: Int,
+    activeCount: Int,
+    onDetailsClick: () -> Unit
+) {
+    val allClear = pendingCount == 0 && failedCount == 0 && activeCount == 0
+    val borderModifier = if (failedCount > 0) {
+        Modifier.border(1.dp, Red500.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+    } else {
+        Modifier
+    }
+
+    GlassCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(borderModifier),
+        intensity = GlassIntensity.Medium
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "SYNCHRONISATION",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B),
+                        letterSpacing = 1.2.sp
+                    )
+                    Text(
+                        text = "Sync Status",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                TextButton(onClick = onDetailsClick) {
+                    Text(
+                        "Details",
+                        color = Sky400,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+
+            if (allClear) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Green500,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Alles synchronisiert",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Green500
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    SyncStatColumn(
+                        count = pendingCount,
+                        label = "Pending",
+                        color = Sky400
+                    )
+                    SyncStatColumn(
+                        count = failedCount,
+                        label = "Failed",
+                        color = Red500
+                    )
+                    SyncStatColumn(
+                        count = activeCount,
+                        label = "Active",
+                        color = Green500
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncStatColumn(
+    count: Int,
+    label: String,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "$count",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Slate400
+        )
+    }
 }

@@ -17,6 +17,7 @@ import com.baluhost.android.presentation.ui.screens.files.FilesScreen
 import com.baluhost.android.presentation.ui.screens.settings.SettingsScreen
 import com.baluhost.android.presentation.ui.screens.shares.SharesScreen
 import com.baluhost.android.presentation.ui.screens.sync.FolderSyncScreen
+import androidx.compose.ui.graphics.Color
 
 /**
  * Main container screen that manages bottom navigation between
@@ -31,6 +32,7 @@ fun MainScreen(
     val currentRoute = navBackStackEntry?.destination?.route ?: Screen.Dashboard.route
 
     Scaffold(
+        containerColor = Color.Transparent,
         bottomBar = {
             BottomNavBar(
                 currentRoute = currentRoute,
@@ -65,6 +67,9 @@ fun MainScreen(
                         onNavigateToVpn = {
                             // Navigate using parent nav controller for screens outside bottom nav
                             parentNavController.navigate(Screen.Vpn.route)
+                        },
+                        onNavigateToSync = {
+                            navController.navigate(Screen.Sync.route)
                         }
                     )
                 }
@@ -122,14 +127,6 @@ fun MainScreen(
                     )
                 }
                 
-                composable(Screen.FolderSync.route) {
-                    FolderSyncScreen(
-                        onNavigateBack = {
-                            // Go back to settings
-                            parentNavController.popBackStack()
-                        }
-                    )
-                }
                 composable(Screen.Permissions.route) {
                     com.baluhost.android.presentation.ui.screens.permissions.PermissionsScreen()
                 }

@@ -5,8 +5,12 @@ import androidx.lifecycle.viewModelScope
 import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.model.FileItem
+import com.baluhost.android.domain.model.OperationStatus
 import com.baluhost.android.domain.model.RaidArray
 import com.baluhost.android.domain.model.SystemInfo
+import com.baluhost.android.domain.model.sync.SyncStatus
+import com.baluhost.android.domain.repository.OfflineQueueRepository
+import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
 import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
@@ -32,7 +36,9 @@ class DashboardViewModel @Inject constructor(
     private val getSystemTelemetryUseCase: GetSystemTelemetryUseCase,
     private val getRaidStatusUseCase: GetRaidStatusUseCase,
     private val preferencesManager: PreferencesManager,
-    private val networkStateManager: NetworkStateManager
+    private val networkStateManager: NetworkStateManager,
+    private val offlineQueueRepository: OfflineQueueRepository,
+    private val syncRepository: SyncRepository
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -58,6 +64,7 @@ class DashboardViewModel @Inject constructor(
         startPolling()
         observeHomeNetworkState()
         checkVpnConfig()
+        observePendingOperations()
     }
     
     override fun onCleared() {
@@ -130,6 +137,8 @@ class DashboardViewModel @Inject constructor(
                     cacheFileCount = cacheStats.fileCount,
                     error = null
                 )
+
+                loadSyncFolders()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -188,6 +197,37 @@ class DashboardViewModel @Inject constructor(
         }
     }
     
+    private fun observePendingOperations() {
+        viewModelScope.launch {
+            offlineQueueRepository.getPendingOperations().collectLatest { operations ->
+                val pendingCount = operations.count {
+                    it.status == OperationStatus.PENDING || it.status == OperationStatus.RETRYING
+                }
+                val failedCount = operations.count { it.status == OperationStatus.FAILED }
+                _uiState.value = _uiState.value.copy(
+                    pendingSyncCount = pendingCount,
+                    failedSyncCount = failedCount
+                )
+            }
+        }
+    }
+
+    private fun loadSyncFolders() {
+        viewModelScope.launch {
+            try {
+                val deviceId = preferencesManager.getDeviceId().first() ?: return@launch
+                val result = syncRepository.getSyncFolders(deviceId)
+                val folders = result.getOrNull() ?: emptyList()
+                _uiState.value = _uiState.value.copy(
+                    activeSyncFolders = folders.count { it.syncStatus == SyncStatus.SYNCING },
+                    syncFolderCount = folders.size
+                )
+            } catch (e: Exception) {
+                Log.e("DashboardViewModel", "Failed to load sync folders", e)
+            }
+        }
+    }
+
     /**
      * Check if VPN config is available in preferences.
      */
@@ -218,5 +258,9 @@ data class DashboardUiState(
     val raidArrays: List<RaidArray> = emptyList(),
     val recentFiles: List<FileItem> = emptyList(),
     val cacheFileCount: Int = 0,
-    val error: String? = null
+    val error: String? = null,
+    val pendingSyncCount: Int = 0,
+    val failedSyncCount: Int = 0,
+    val activeSyncFolders: Int = 0,
+    val syncFolderCount: Int = 0
 )
