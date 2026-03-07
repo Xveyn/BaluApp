@@ -50,7 +50,14 @@ fun PermissionsScreen(viewModel: PermissionsViewModel = hiltViewModel()) {
             )
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { viewModel.loadPermissions() }) { Text("Laden") }
+                Button(
+                    onClick = { viewModel.loadPermissions() },
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = com.baluhost.android.presentation.ui.theme.Sky500,
+                        contentColor = com.baluhost.android.presentation.ui.theme.Slate950
+                    )
+                ) { Text("Laden") }
                 OutlinedTextField(
                     value = newUserIdText,
                     onValueChange = { newUserIdText = it.filter { ch -> ch.isDigit() } },

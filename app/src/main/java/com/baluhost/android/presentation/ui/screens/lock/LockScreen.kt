@@ -137,7 +137,12 @@ fun LockScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(56.dp),
-                    enabled = !uiState.isAuthenticating
+                    enabled = !uiState.isAuthenticating,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = com.baluhost.android.presentation.ui.theme.Sky500,
+                        contentColor = Color.White
+                    )
                 ) {
                     if (uiState.isAuthenticating) {
                         CircularProgressIndicator(

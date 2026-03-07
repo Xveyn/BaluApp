@@ -14,6 +14,7 @@ import com.baluhost.android.presentation.ui.screens.pending.PendingOperationsScr
 import com.baluhost.android.presentation.ui.screens.qrscanner.QrScannerScreen
 import com.baluhost.android.presentation.ui.screens.splash.SplashScreen
 import com.baluhost.android.presentation.ui.screens.storage.StorageOverviewScreen
+import com.baluhost.android.presentation.ui.screens.sync.FolderSyncScreen
 import com.baluhost.android.presentation.ui.screens.vpn.VpnScreen
 import java.net.URLDecoder
 
@@ -148,6 +149,18 @@ fun NavGraph(
                     navController.popBackStack()
                 }
             )
+        }
+
+        composable(Screen.FolderSync.route) {
+            FolderSyncScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.Permissions.route) {
+            com.baluhost.android.presentation.ui.screens.permissions.PermissionsScreen()
         }
     }
 }

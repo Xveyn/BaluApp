@@ -4,7 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
+import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -34,7 +34,7 @@ import javax.inject.Inject
  * Handles notification deep links, intent routing, and app lock lifecycle.
  */
 @AndroidEntryPoint
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     
     @Inject
     lateinit var appLockManager: AppLockManager
@@ -142,25 +142,19 @@ class MainActivity : ComponentActivity() {
         when (notificationType) {
             "expiration_warning" -> {
                 Log.i(TAG, "Opening device settings for expiration warning")
-                // TODO: Navigate to device settings or re-registration screen
-                // return "device_settings" or "qr_scanner"
-                return null // Placeholder until navigation routes are defined
+                return Screen.Settings.route
             }
             "device_removed" -> {
-                Log.i(TAG, "Device was removed, clearing local data")
-                // TODO: Clear stored credentials and navigate to login
-                // preferencesManager.clearAll()
-                // return "qr_scanner"
-                return null // Placeholder
+                Log.i(TAG, "Device was removed, navigating to re-registration")
+                return Screen.QrScanner.route
             }
         }
-        
+
         // Handle action intents
         when (action) {
             "renew_device" -> {
                 Log.i(TAG, "Opening device renewal flow")
-                // TODO: Navigate to re-registration screen
-                return null // Placeholder
+                return Screen.QrScanner.route
             }
         }
         
@@ -188,23 +182,19 @@ class MainActivity : ComponentActivity() {
         return when (uri.host) {
             "files" -> {
                 Log.d(TAG, "Deep link to files")
-                // TODO: Return file browser route
-                null
+                Screen.Main.route
             }
             "settings" -> {
                 Log.d(TAG, "Deep link to settings")
-                // TODO: Return settings route
-                null
+                Screen.Main.route
             }
             "device_settings" -> {
                 Log.d(TAG, "Deep link to device settings")
-                // TODO: Return device settings route
-                null
+                Screen.Main.route
             }
             "scan" -> {
                 Log.d(TAG, "Deep link to QR scanner")
-                // TODO: Return QR scanner route
-                null
+                Screen.QrScanner.route
             }
             else -> {
                 Log.w(TAG, "Unknown deep link host: ${uri.host}")

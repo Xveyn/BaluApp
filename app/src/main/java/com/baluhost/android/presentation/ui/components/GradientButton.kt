@@ -25,7 +25,7 @@ fun GradientButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     gradient: Brush = defaultGradient(),
-    shape: RoundedCornerShape = RoundedCornerShape(8.dp),
+    shape: RoundedCornerShape = RoundedCornerShape(24.dp),
     contentPadding: PaddingValues = PaddingValues(horizontal = 24.dp, vertical = 12.dp)
 ) {
     Button(
@@ -35,7 +35,7 @@ fun GradientButton(
         shape = shape,
         colors = ButtonDefaults.buttonColors(
             containerColor = Color.Transparent,
-            disabledContainerColor = Slate700
+            disabledContainerColor = Slate700.copy(alpha = 0.6f)
         ),
         contentPadding = contentPadding,
         elevation = ButtonDefaults.buttonElevation(
@@ -46,7 +46,11 @@ fun GradientButton(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(gradient)
+                .background(
+                    brush = if (enabled) gradient else Brush.horizontalGradient(
+                        listOf(Slate700, Slate600)
+                    )
+                )
         ) {
             Row(
                 modifier = Modifier

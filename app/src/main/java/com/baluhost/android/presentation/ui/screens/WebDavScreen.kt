@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -56,10 +57,24 @@ fun WebDavScreen(viewModel: WebDavViewModel = hiltViewModel()) {
         Spacer(modifier = Modifier.height(12.dp))
 
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { viewModel.testCredentials(username.ifBlank { null }, password.ifBlank { null }) }) {
+            Button(
+                onClick = { viewModel.testCredentials(username.ifBlank { null }, password.ifBlank { null }) },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = com.baluhost.android.presentation.ui.theme.Indigo500,
+                    contentColor = Color.White
+                )
+            ) {
                 Text("Test Credentials")
             }
-            Button(onClick = { viewModel.listRemote(path, username.ifBlank { null }, password.ifBlank { null }) }) {
+            Button(
+                onClick = { viewModel.listRemote(path, username.ifBlank { null }, password.ifBlank { null }) },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = com.baluhost.android.presentation.ui.theme.Sky500,
+                    contentColor = com.baluhost.android.presentation.ui.theme.Slate950
+                )
+            ) {
                 Text("List")
             }
         }
