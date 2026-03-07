@@ -1,6 +1,5 @@
 package com.baluhost.android.presentation.ui.screens.sync
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -15,11 +14,16 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
-import com.baluhost.android.presentation.ui.theme.Slate400
+import com.baluhost.android.presentation.ui.components.GlassIntensity
+import com.baluhost.android.presentation.ui.theme.Sky400
 import com.baluhost.android.presentation.ui.theme.Slate100
+import com.baluhost.android.presentation.ui.theme.Slate400
+import com.baluhost.android.presentation.ui.theme.Slate800
 import com.baluhost.android.domain.model.sync.SyncStatus
 
 /**
@@ -36,17 +40,24 @@ fun SyncScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sync") }
+                title = {
+                    Text(
+                        "Sync",
+                        color = Color.White
+                    )
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                )
             )
-        }
+        },
+        containerColor = Color.Transparent
     ) { padding ->
-        Box(modifier = Modifier
-            .fillMaxSize()
-            .padding(padding)) {
-
+        BaluBackground {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(padding)
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
@@ -59,7 +70,7 @@ fun SyncScreen(
                 }
 
                 items(state.folders) { folder ->
-                    GlassCard(intensity = com.baluhost.android.presentation.ui.components.GlassIntensity.Medium) {
+                    GlassCard(intensity = GlassIntensity.Medium) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -75,15 +86,24 @@ fun SyncScreen(
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 when (folder.syncStatus) {
-                                    SyncStatus.IDLE -> Icon(Icons.Default.CloudDone, contentDescription = "Idle", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    SyncStatus.SYNCING -> Icon(Icons.Default.Sync, contentDescription = "Syncing", tint = MaterialTheme.colorScheme.primary)
+                                    SyncStatus.IDLE -> Icon(Icons.Default.CloudDone, contentDescription = "Idle", tint = Slate400)
+                                    SyncStatus.SYNCING -> Icon(Icons.Default.Sync, contentDescription = "Syncing", tint = Sky400)
                                     SyncStatus.ERROR -> Icon(Icons.Default.CloudOff, contentDescription = "Error", tint = MaterialTheme.colorScheme.error)
-                                    SyncStatus.PAUSED -> Icon(Icons.Default.CloudOff, contentDescription = "Paused", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    SyncStatus.PAUSED -> Icon(Icons.Default.CloudOff, contentDescription = "Paused", tint = Slate400)
                                 }
 
                                 Spacer(modifier = Modifier.width(12.dp))
 
-                                Switch(checked = folder.enabled, onCheckedChange = { viewModel.toggleFolderEnabled(folder.path) })
+                                Switch(
+                                    checked = folder.enabled,
+                                    onCheckedChange = { viewModel.toggleFolderEnabled(folder.path) },
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = Sky400,
+                                        checkedTrackColor = Slate800,
+                                        uncheckedThumbColor = Slate400,
+                                        uncheckedTrackColor = Slate800
+                                    )
+                                )
                             }
                         }
                     }

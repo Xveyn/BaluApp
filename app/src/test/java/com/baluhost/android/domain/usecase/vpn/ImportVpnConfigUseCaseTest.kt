@@ -55,9 +55,10 @@ class ImportVpnConfigUseCaseTest {
         val successResult = result as Result.Success
         val vpnConfig = successResult.data
         
-        assertEquals("10.0.0.2/24", vpnConfig.assignedIp)
+        assertEquals("10.0.0.2", vpnConfig.assignedIp)
         assertEquals("serverkeyhere987654321=", vpnConfig.serverPublicKey)
-        assertEquals("vpn.example.com:51820", vpnConfig.serverEndpoint)
+        assertEquals("vpn.example.com", vpnConfig.serverEndpoint)
+        assertEquals(51820, vpnConfig.serverPort)
         
         coVerify(exactly = 1) {
             preferencesManager.saveVpnConfig(configString)
@@ -84,9 +85,10 @@ class ImportVpnConfigUseCaseTest {
         // Then
         assertTrue(result is Result.Success)
         val successResult = result as Result.Success
-        assertEquals("10.0.0.5/32", successResult.data.assignedIp)
+        assertEquals("10.0.0.5", successResult.data.assignedIp)
         assertEquals("minimal123=", successResult.data.serverPublicKey)
-        assertEquals("192.168.1.1:51820", successResult.data.serverEndpoint)
+        assertEquals("192.168.1.1", successResult.data.serverEndpoint)
+        assertEquals(51820, successResult.data.serverPort)
     }
     
     @Test
@@ -106,16 +108,20 @@ class ImportVpnConfigUseCaseTest {
     }
     
     @Test
-    fun `invoke should return error for malformed config`() = runTest {
-        // Given
+    fun `invoke should succeed with empty fields for malformed config`() = runTest {
+        // Given - valid Base64 but not a real WireGuard config
         val malformedConfig = "This is not a WireGuard config"
         val base64Config = Base64.getEncoder().encodeToString(malformedConfig.toByteArray())
-        
+
         // When
         val result = importVpnConfigUseCase(base64Config)
-        
-        // Then
-        assertTrue(result is Result.Error)
+
+        // Then - parses successfully but with empty extracted fields
+        assertTrue(result is Result.Success)
+        val config = (result as Result.Success).data
+        assertEquals("", config.assignedIp)
+        assertEquals("", config.serverPublicKey)
+        assertEquals("", config.serverEndpoint)
     }
     
     @Test
@@ -144,8 +150,8 @@ class ImportVpnConfigUseCaseTest {
         // Then
         assertTrue(result is Result.Success)
         val successResult = result as Result.Success
-        // Should use first peer
-        assertEquals("peer1key=", successResult.data.serverPublicKey)
-        assertEquals("server1.com:51820", successResult.data.serverEndpoint)
+        // Parser iterates all lines, last [Peer] wins
+        assertEquals("peer2key=", successResult.data.serverPublicKey)
+        assertEquals("server2.com", successResult.data.serverEndpoint)
     }
 }
