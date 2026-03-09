@@ -15,7 +15,6 @@ import com.baluhost.android.presentation.ui.components.BottomNavBar
 import com.baluhost.android.presentation.ui.screens.dashboard.DashboardScreen
 import com.baluhost.android.presentation.ui.screens.files.FilesScreen
 import com.baluhost.android.presentation.ui.screens.settings.SettingsScreen
-import com.baluhost.android.presentation.ui.screens.shares.SharesScreen
 import com.baluhost.android.presentation.ui.screens.sync.FolderSyncScreen
 import androidx.compose.ui.graphics.Color
 
@@ -70,6 +69,18 @@ fun MainScreen(
                         },
                         onNavigateToSync = {
                             navController.navigate(Screen.Sync.route)
+                        },
+                        onNavigateToCpuDetail = {
+                            parentNavController.navigate(Screen.CpuDetail.route)
+                        },
+                        onNavigateToMemoryDetail = {
+                            parentNavController.navigate(Screen.MemoryDetail.route)
+                        },
+                        onNavigateToPowerDetail = {
+                            parentNavController.navigate(Screen.PowerDetail.route)
+                        },
+                        onNavigateToStorageDetail = {
+                            parentNavController.navigate(Screen.StorageDetail.route)
                         }
                     )
                 }

@@ -1,6 +1,7 @@
 package com.baluhost.android.data.remote.api
 
 import com.baluhost.android.data.remote.dto.CurrentPowerDto
+import com.baluhost.android.data.remote.dto.EnergyDashboardResponseDto
 import com.baluhost.android.data.remote.dto.EnergyPeriodStatsDto
 import com.baluhost.android.data.remote.dto.TapoDeviceDto
 import retrofit2.http.GET
@@ -22,4 +23,7 @@ interface EnergyApi {
 
     @GET("energy/stats/{device_id}/month")
     suspend fun getMonthStats(@Path("device_id") deviceId: Int): EnergyPeriodStatsDto?
+
+    @GET("energy/dashboard/{device_id}")
+    suspend fun getEnergyDashboard(@Path("device_id") deviceId: Int): EnergyDashboardResponseDto
 }
