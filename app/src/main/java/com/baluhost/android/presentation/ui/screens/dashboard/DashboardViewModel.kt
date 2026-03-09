@@ -8,6 +8,7 @@ import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.model.OperationStatus
 import com.baluhost.android.domain.model.RaidArray
+import com.baluhost.android.domain.model.ShareStatistics
 import com.baluhost.android.domain.model.SmartDeviceInfo
 import com.baluhost.android.domain.model.SystemInfo
 import com.baluhost.android.domain.model.sync.SyncStatus
@@ -17,6 +18,7 @@ import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
 import com.baluhost.android.domain.usecase.system.GetEnergyDashboardUseCase
 import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
+import com.baluhost.android.domain.usecase.shares.GetShareStatisticsUseCase
 import com.baluhost.android.domain.usecase.system.GetSmartStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
 import com.baluhost.android.util.NetworkStateManager
@@ -41,6 +43,7 @@ class DashboardViewModel @Inject constructor(
     private val getEnergyDashboardUseCase: GetEnergyDashboardUseCase,
     private val getRaidStatusUseCase: GetRaidStatusUseCase,
     private val getSmartStatusUseCase: GetSmartStatusUseCase,
+    private val getShareStatisticsUseCase: GetShareStatisticsUseCase,
     private val preferencesManager: PreferencesManager,
     private val networkStateManager: NetworkStateManager,
     private val offlineQueueRepository: OfflineQueueRepository,
@@ -154,6 +157,17 @@ class DashboardViewModel @Inject constructor(
                     else -> null
                 }
 
+                // Load share statistics
+                val shareStatsResult = getShareStatisticsUseCase()
+                val shareStats = when (shareStatsResult) {
+                    is Result.Success -> shareStatsResult.data
+                    is Result.Error -> {
+                        Log.e("DashboardViewModel", "Failed to load share stats", shareStatsResult.exception)
+                        null
+                    }
+                    else -> null
+                }
+
                 // Load recent files (from root)
                 val filesResult = getFilesUseCase("/", forceRefresh = false)
                 val recentFiles = when (filesResult) {
@@ -171,6 +185,7 @@ class DashboardViewModel @Inject constructor(
                     energy = energy,
                     raidArrays = raidArrays,
                     smartDevices = smartDevices,
+                    shareStats = shareStats,
                     recentFiles = recentFiles,
                     cacheFileCount = cacheStats.fileCount,
                     error = null
@@ -218,11 +233,19 @@ class DashboardViewModel @Inject constructor(
                     else -> null
                 }
 
+                val shareStatsResult = getShareStatisticsUseCase()
+                val shareStats = when (shareStatsResult) {
+                    is Result.Success -> shareStatsResult.data
+                    is Result.Error -> _uiState.value.shareStats
+                    else -> _uiState.value.shareStats
+                }
+
                 _uiState.value = _uiState.value.copy(
                     telemetry = telemetry,
                     energy = energy,
                     raidArrays = raidArrays,
-                    smartDevices = smartDevices
+                    smartDevices = smartDevices,
+                    shareStats = shareStats
                 )
             } catch (e: Exception) {
                 Log.e("DashboardViewModel", "Failed to poll telemetry", e)
@@ -312,6 +335,7 @@ data class DashboardUiState(
     val energy: EnergyDashboard? = null,
     val raidArrays: List<RaidArray> = emptyList(),
     val smartDevices: List<SmartDeviceInfo> = emptyList(),
+    val shareStats: ShareStatistics? = null,
     val recentFiles: List<FileItem> = emptyList(),
     val cacheFileCount: Int = 0,
     val error: String? = null,

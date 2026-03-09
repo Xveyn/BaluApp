@@ -8,6 +8,7 @@ import com.baluhost.android.data.remote.api.EnergyApi
 import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.data.remote.api.MonitoringApi
+import com.baluhost.android.data.remote.api.SharesApi
 import com.baluhost.android.data.remote.api.SyncApi
 import com.baluhost.android.data.remote.api.SystemApi
 import com.baluhost.android.data.remote.api.VpnApi
@@ -151,6 +152,12 @@ object NetworkModule {
         return retrofit.create(MonitoringApi::class.java)
     }
 
+    @Provides
+    @Singleton
+    fun provideSharesApi(retrofit: Retrofit): SharesApi {
+        return retrofit.create(SharesApi::class.java)
+    }
+    
     @Provides
     @Singleton
     fun provideNetworkStateManager(

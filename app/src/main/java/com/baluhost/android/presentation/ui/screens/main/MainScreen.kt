@@ -81,6 +81,9 @@ fun MainScreen(
                         },
                         onNavigateToStorageDetail = {
                             parentNavController.navigate(Screen.StorageDetail.route)
+                        },
+                        onNavigateToSharesDetail = {
+                            parentNavController.navigate(Screen.SharesDetail.route)
                         }
                     )
                 }

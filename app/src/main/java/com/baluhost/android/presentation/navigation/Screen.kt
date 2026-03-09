@@ -31,4 +31,5 @@ sealed class Screen(val route: String) {
     object MemoryDetail : Screen("memory_detail")
     object PowerDetail : Screen("power_detail")
     object StorageDetail : Screen("storage_detail")
+    object SharesDetail : Screen("shares_detail")
 }

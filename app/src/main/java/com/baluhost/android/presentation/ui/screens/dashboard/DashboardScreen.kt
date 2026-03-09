@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
+import com.baluhost.android.domain.model.ShareStatistics
 import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
@@ -60,6 +61,7 @@ fun DashboardScreen(
     onNavigateToMemoryDetail: () -> Unit = {},
     onNavigateToPowerDetail: () -> Unit = {},
     onNavigateToStorageDetail: () -> Unit = {},
+    onNavigateToSharesDetail: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -322,121 +324,44 @@ fun DashboardScreen(
                         }
                     )
 
+                    // Quick Share Card
+                    QuickShareCard(
+                        stats = uiState.shareStats,
+                        isActivated = activatedCard == "shares",
+                        onClick = {
+                            if (activatedCard == "shares") {
+                                activatedCard = null
+                                onNavigateToSharesDetail()
+                            } else {
+                                activatedCard = "shares"
+                            }
+                        }
+                    )
+
                     // Sync Summary Card
                     SyncSummaryCard(
                         pendingCount = uiState.pendingSyncCount,
                         failedCount = uiState.failedSyncCount,
                         activeCount = uiState.activeSyncFolders,
-                        onDetailsClick = onNavigateToSync
+                        onDetailsClick = onNavigateToSync,
+                        isActivated = activatedCard == "sync",
+                        onClick = {
+                            if (activatedCard == "sync") {
+                                activatedCard = null
+                                onNavigateToSync()
+                            } else {
+                                activatedCard = "sync"
+                            }
+                        }
                     )
 
-                    // RAID Arrays Section
-                    if (uiState.raidArrays.isNotEmpty()) {
-                        Surface(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(16.dp),
-                            color = Color(0xFF0F172A).copy(alpha = 0.6f),
-                            border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "NAS CONFIGURATION",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF64748B),
-                                            letterSpacing = 1.2.sp
-                                        )
-                                        Text(
-                                            text = "RAID Arrays",
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = Color.White,
-                                            modifier = Modifier.padding(top = 4.dp)
-                                        )
-                                    }
-                                }
-
-                                uiState.raidArrays.forEach { raid ->
-                                    RaidArrayCard(raid = raid)
-                                }
-                            }
-                        }
-                    }
-
                     // Recent Activity Section
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
-                        color = Color(0xFF0F172A).copy(alpha = 0.6f),
-                        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "RECENT ACTIVITY",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF64748B),
-                                        letterSpacing = 1.2.sp
-                                    )
-                                    Text(
-                                        text = "Recent Files",
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color.White,
-                                        modifier = Modifier.padding(top = 4.dp)
-                                    )
-                                }
-                                TextButton(onClick = onNavigateToFiles) {
-                                    Text(
-                                        "View All",
-                                        color = Sky400,
-                                        style = MaterialTheme.typography.labelMedium
-                                    )
-                                }
-                            }
-
-                            if (uiState.recentFiles.isEmpty()) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(120.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFF0F172A).copy(alpha = 0.6f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "No recent files",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = Color(0xFF64748B)
-                                    )
-                                }
-                            } else {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    uiState.recentFiles.take(5).forEach { file ->
-                                        RecentFileItem(file = file)
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    RecentActivityCard(
+                        recentFiles = uiState.recentFiles,
+                        isActivated = activatedCard == "recent",
+                        onClick = { activatedCard = "recent" },
+                        onViewAll = onNavigateToFiles
+                    )
                 }
             }
         }
@@ -879,9 +804,19 @@ private fun SyncSummaryCard(
     pendingCount: Int,
     failedCount: Int,
     activeCount: Int,
-    onDetailsClick: () -> Unit
+    onDetailsClick: () -> Unit,
+    isActivated: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
+    val syncGradient = listOf(Color(0xFF10B981), Color(0xFF06B6D4))
     val allClear = pendingCount == 0 && failedCount == 0 && activeCount == 0
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isActivated) 1f else 0f,
+        animationSpec = tween(300),
+        label = "syncGlowAlpha"
+    )
+
     val borderModifier = if (failedCount > 0) {
         Modifier.border(1.dp, Red500.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
     } else {
@@ -891,10 +826,26 @@ private fun SyncSummaryCard(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .then(borderModifier),
+            .then(
+                if (glowAlpha > 0f) Modifier.neonGlow(
+                    color = syncGradient.first(),
+                    alpha = glowAlpha * 0.28f,
+                    radius = 18.dp,
+                    cornerRadius = 16.dp
+                ) else Modifier
+            )
+            .then(borderModifier)
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() }
+                else Modifier
+            ),
         shape = RoundedCornerShape(16.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.6f),
-        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        border = if (isActivated) {
+            BorderStroke(1.5.dp, Brush.linearGradient(syncGradient))
+        } else {
+            BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        }
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -1214,6 +1165,247 @@ private fun PowerStatItem(
             style = MaterialTheme.typography.labelSmall,
             color = Color(0xFF94A3B8)
         )
+    }
+}
+
+@Composable
+private fun QuickShareCard(
+    stats: ShareStatistics?,
+    isActivated: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val shareGradient = listOf(Color(0xFF3B82F6), Color(0xFF6366F1))
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isActivated) 1f else 0f,
+        animationSpec = tween(300),
+        label = "shareGlowAlpha"
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (glowAlpha > 0f) Modifier.neonGlow(
+                    color = shareGradient.first(),
+                    alpha = glowAlpha * 0.28f,
+                    radius = 18.dp,
+                    cornerRadius = 16.dp
+                ) else Modifier
+            )
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() }
+                else Modifier
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+        border = if (isActivated) {
+            BorderStroke(1.5.dp, Brush.linearGradient(shareGradient))
+        } else {
+            BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        }
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "FILE SHARING",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B),
+                        letterSpacing = 1.2.sp
+                    )
+                    Text(
+                        text = "Quick Share",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Brush.linearGradient(shareGradient)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            if (stats == null || (stats.activeShares == 0 && stats.sharedWithMe == 0)) {
+                // Empty state
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FolderShared,
+                        contentDescription = null,
+                        tint = Color(0xFF64748B),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "No active shares",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF64748B)
+                    )
+                }
+            } else {
+                // Stats row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    ShareStatColumn(
+                        count = stats.activeShares,
+                        label = "Shared by me",
+                        color = Color(0xFF3B82F6)
+                    )
+                    ShareStatColumn(
+                        count = stats.sharedWithMe,
+                        label = "Shared with me",
+                        color = Color(0xFF6366F1)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ShareStatColumn(
+    count: Int,
+    label: String,
+    color: Color
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = "$count",
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = color
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Slate400
+        )
+    }
+}
+
+@Composable
+private fun RecentActivityCard(
+    recentFiles: List<FileItem>,
+    isActivated: Boolean = false,
+    onClick: (() -> Unit)? = null,
+    onViewAll: () -> Unit
+) {
+    val recentGradient = listOf(Color(0xFF3B82F6), Color(0xFF818CF8))
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isActivated) 1f else 0f,
+        animationSpec = tween(300),
+        label = "recentGlowAlpha"
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (glowAlpha > 0f) Modifier.neonGlow(
+                    color = recentGradient.first(),
+                    alpha = glowAlpha * 0.28f,
+                    radius = 18.dp,
+                    cornerRadius = 16.dp
+                ) else Modifier
+            )
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() }
+                else Modifier
+            ),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+        border = if (isActivated) {
+            BorderStroke(1.5.dp, Brush.linearGradient(recentGradient))
+        } else {
+            BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        }
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "RECENT ACTIVITY",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B),
+                        letterSpacing = 1.2.sp
+                    )
+                    Text(
+                        text = "Recent Files",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                TextButton(onClick = onViewAll) {
+                    Text(
+                        "View All",
+                        color = Sky400,
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                }
+            }
+
+            if (recentFiles.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(Color(0xFF0F172A).copy(alpha = 0.6f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "No recent files",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF64748B)
+                    )
+                }
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    recentFiles.take(5).forEach { file ->
+                        RecentFileItem(file = file)
+                    }
+                }
+            }
+        }
     }
 }
 
