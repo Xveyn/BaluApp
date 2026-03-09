@@ -90,4 +90,9 @@ interface SyncRepository {
      * Download a file from a sync folder.
      */
     suspend fun downloadFile(folderId: Long, remotePath: String): okhttp3.ResponseBody
+
+    /**
+     * Get sync schedules from server.
+     */
+    suspend fun getSyncSchedules(): Result<List<SyncSchedule>>
 }

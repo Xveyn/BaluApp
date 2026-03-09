@@ -48,6 +48,10 @@ class SyncNotificationManager @Inject constructor(
         private const val NOTIFICATION_ID_SYNC_ERROR = 1003
         private const val NOTIFICATION_ID_CONFLICTS = 1004
         
+        // Server connection
+        const val CHANNEL_SERVER_CONNECTION = "server_connection"
+        const val NOTIFICATION_ID_CONNECTION = 1010
+
         // Actions
         const val ACTION_CANCEL_SYNC = "com.baluhost.android.CANCEL_SYNC"
         const val ACTION_RESOLVE_CONFLICTS = "com.baluhost.android.RESOLVE_CONFLICTS"
