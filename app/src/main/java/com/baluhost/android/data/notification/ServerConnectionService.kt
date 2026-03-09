@@ -12,7 +12,6 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import com.baluhost.android.R
 import com.baluhost.android.data.worker.FolderSyncWorker
 import com.baluhost.android.presentation.MainActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -176,7 +175,7 @@ class ServerConnectionService : Service() {
                     buildNotification(
                         title = "Mit BaluHost verbunden",
                         text = syncText,
-                        icon = R.drawable.ic_stat_connected,
+                        icon = android.R.drawable.stat_notify_sync,
                         progressMax = if (isIndeterminate) 0 else syncProgress.total,
                         progressCurrent = if (isIndeterminate) 0 else syncProgress.current,
                         progressIndeterminate = isIndeterminate,
@@ -186,7 +185,7 @@ class ServerConnectionService : Service() {
                     buildNotification(
                         title = "Mit BaluHost verbunden",
                         text = uptimeText,
-                        icon = R.drawable.ic_stat_connected
+                        icon = android.R.drawable.stat_notify_sync
                     )
                 }
             }
@@ -204,7 +203,7 @@ class ServerConnectionService : Service() {
     private fun buildNotification(
         title: String,
         text: String,
-        icon: Int = R.drawable.balu_logo,
+        icon: Int = android.R.drawable.stat_notify_sync,
         progressMax: Int = 0,
         progressCurrent: Int = 0,
         progressIndeterminate: Boolean = false,
