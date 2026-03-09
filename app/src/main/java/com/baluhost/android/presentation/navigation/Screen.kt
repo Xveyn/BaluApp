@@ -27,4 +27,8 @@ sealed class Screen(val route: String) {
     object Lock : Screen("lock")
     object PendingOperations : Screen("pending_operations")
     object FolderSync : Screen("folder_sync")
+    object CpuDetail : Screen("cpu_detail")
+    object MemoryDetail : Screen("memory_detail")
+    object PowerDetail : Screen("power_detail")
+    object StorageDetail : Screen("storage_detail")
 }

@@ -8,6 +8,7 @@ import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.model.OperationStatus
 import com.baluhost.android.domain.model.RaidArray
+import com.baluhost.android.domain.model.SmartDeviceInfo
 import com.baluhost.android.domain.model.SystemInfo
 import com.baluhost.android.domain.model.sync.SyncStatus
 import com.baluhost.android.domain.repository.OfflineQueueRepository
@@ -16,6 +17,7 @@ import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
 import com.baluhost.android.domain.usecase.system.GetEnergyDashboardUseCase
 import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
+import com.baluhost.android.domain.usecase.system.GetSmartStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
 import com.baluhost.android.util.NetworkStateManager
 import com.baluhost.android.util.Result
@@ -38,6 +40,7 @@ class DashboardViewModel @Inject constructor(
     private val getSystemTelemetryUseCase: GetSystemTelemetryUseCase,
     private val getEnergyDashboardUseCase: GetEnergyDashboardUseCase,
     private val getRaidStatusUseCase: GetRaidStatusUseCase,
+    private val getSmartStatusUseCase: GetSmartStatusUseCase,
     private val preferencesManager: PreferencesManager,
     private val networkStateManager: NetworkStateManager,
     private val offlineQueueRepository: OfflineQueueRepository,
@@ -123,6 +126,20 @@ class DashboardViewModel @Inject constructor(
                     else -> emptyList()
                 }
                 
+                // Load SMART status
+                val smartResult = getSmartStatusUseCase()
+                val smartDevices = when (smartResult) {
+                    is Result.Success -> {
+                        Log.d("DashboardViewModel", "SMART devices loaded: ${smartResult.data.devices.size} devices")
+                        smartResult.data.devices
+                    }
+                    is Result.Error -> {
+                        Log.e("DashboardViewModel", "Failed to load SMART status", smartResult.exception)
+                        emptyList()
+                    }
+                    else -> emptyList()
+                }
+
                 // Load energy dashboard
                 val energyResult = getEnergyDashboardUseCase()
                 val energy = when (energyResult) {
@@ -153,6 +170,7 @@ class DashboardViewModel @Inject constructor(
                     telemetry = telemetry,
                     energy = energy,
                     raidArrays = raidArrays,
+                    smartDevices = smartDevices,
                     recentFiles = recentFiles,
                     cacheFileCount = cacheStats.fileCount,
                     error = null
@@ -186,6 +204,13 @@ class DashboardViewModel @Inject constructor(
                     else -> emptyList()
                 }
 
+                val smartResult = getSmartStatusUseCase()
+                val smartDevices = when (smartResult) {
+                    is Result.Success -> smartResult.data.devices
+                    is Result.Error -> _uiState.value.smartDevices
+                    else -> _uiState.value.smartDevices
+                }
+
                 val energyResult = getEnergyDashboardUseCase()
                 val energy = when (energyResult) {
                     is Result.Success -> energyResult.data
@@ -196,7 +221,8 @@ class DashboardViewModel @Inject constructor(
                 _uiState.value = _uiState.value.copy(
                     telemetry = telemetry,
                     energy = energy,
-                    raidArrays = raidArrays
+                    raidArrays = raidArrays,
+                    smartDevices = smartDevices
                 )
             } catch (e: Exception) {
                 Log.e("DashboardViewModel", "Failed to poll telemetry", e)
@@ -285,6 +311,7 @@ data class DashboardUiState(
     val telemetry: SystemInfo? = null,
     val energy: EnergyDashboard? = null,
     val raidArrays: List<RaidArray> = emptyList(),
+    val smartDevices: List<SmartDeviceInfo> = emptyList(),
     val recentFiles: List<FileItem> = emptyList(),
     val cacheFileCount: Int = 0,
     val error: String? = null,

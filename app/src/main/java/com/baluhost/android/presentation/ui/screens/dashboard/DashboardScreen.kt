@@ -1,8 +1,12 @@
 package com.baluhost.android.presentation.ui.screens.dashboard
 
+import android.graphics.BlurMaskFilter
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,11 +21,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -32,6 +41,7 @@ import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
 import com.baluhost.android.presentation.ui.theme.*
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -46,15 +56,30 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToVpn: () -> Unit = {},
     onNavigateToSync: () -> Unit = {},
+    onNavigateToCpuDetail: () -> Unit = {},
+    onNavigateToMemoryDetail: () -> Unit = {},
+    onNavigateToPowerDetail: () -> Unit = {},
+    onNavigateToStorageDetail: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    
+
     // Collect VPN state for banner
     val isInHomeNetwork by viewModel.isInHomeNetwork.collectAsState()
     val hasVpnConfig by viewModel.hasVpnConfig.collectAsState()
     val vpnBannerDismissed by viewModel.vpnBannerDismissed.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
+
+    // Card activation state for tap-to-glow-then-navigate
+    var activatedCard by remember { mutableStateOf<String?>(null) }
+
+    // Auto-reset after 3 seconds
+    LaunchedEffect(activatedCard) {
+        if (activatedCard != null) {
+            delay(3000L)
+            activatedCard = null
+        }
+    }
     
     Scaffold(
         topBar = {
@@ -201,6 +226,15 @@ fun DashboardScreen(
                                 progress = telemetry?.cpu?.usagePercent?.toFloat() ?: 0f,
                                 icon = Icons.Default.Memory,
                                 gradientColors = listOf(Color(0xFF8B5CF6), Color(0xFFD946EF)),
+                                isActivated = activatedCard == "cpu",
+                                onClick = {
+                                    if (activatedCard == "cpu") {
+                                        activatedCard = null
+                                        onNavigateToCpuDetail()
+                                    } else {
+                                        activatedCard = "cpu"
+                                    }
+                                },
                                 modifier = Modifier.weight(1f)
                             )
 
@@ -220,6 +254,15 @@ fun DashboardScreen(
                                 progress = telemetry?.memory?.usagePercent?.toFloat() ?: 0f,
                                 icon = Icons.Default.Storage,
                                 gradientColors = listOf(Color(0xFF0EA5E9), Color(0xFF6366F1)),
+                                isActivated = activatedCard == "memory",
+                                onClick = {
+                                    if (activatedCard == "memory") {
+                                        activatedCard = null
+                                        onNavigateToMemoryDetail()
+                                    } else {
+                                        activatedCard = "memory"
+                                    }
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                         }
@@ -237,6 +280,15 @@ fun DashboardScreen(
                                 progress = telemetry?.disk?.usagePercent?.toFloat() ?: 0f,
                                 icon = Icons.Default.Folder,
                                 gradientColors = listOf(Color(0xFF06B6D4), Color(0xFF0284C7)),
+                                isActivated = activatedCard == "storage",
+                                onClick = {
+                                    if (activatedCard == "storage") {
+                                        activatedCard = null
+                                        onNavigateToStorageDetail()
+                                    } else {
+                                        activatedCard = "storage"
+                                    }
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                             
@@ -249,13 +301,26 @@ fun DashboardScreen(
                                 progress = 100f,
                                 icon = Icons.Default.Power,
                                 gradientColors = listOf(Color(0xFF10B981), Color(0xFF14B8A6)),
+                                isActivated = activatedCard == "uptime",
+                                onClick = { activatedCard = "uptime" },
                                 modifier = Modifier.weight(1f)
                             )
                         }
                     }
                     
                     // Power Consumption Card
-                    PowerConsumptionCard(energy = uiState.energy)
+                    PowerConsumptionCard(
+                        energy = uiState.energy,
+                        isActivated = activatedCard == "power",
+                        onClick = {
+                            if (activatedCard == "power") {
+                                activatedCard = null
+                                onNavigateToPowerDetail()
+                            } else {
+                                activatedCard = "power"
+                            }
+                        }
+                    )
 
                     // Sync Summary Card
                     SyncSummaryCard(
@@ -298,14 +363,14 @@ fun DashboardScreen(
                                         )
                                     }
                                 }
-                                
+
                                 uiState.raidArrays.forEach { raid ->
                                     RaidArrayCard(raid = raid)
                                 }
                             }
                         }
                     }
-                    
+
                     // Recent Activity Section
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
@@ -345,7 +410,7 @@ fun DashboardScreen(
                                     )
                                 }
                             }
-                            
+
                             if (uiState.recentFiles.isEmpty()) {
                                 Box(
                                     modifier = Modifier
@@ -393,14 +458,38 @@ private fun SystemMetricCard(
     icon: ImageVector,
     gradientColors: List<Color>,
     modifier: Modifier = Modifier,
-    subtitle: String? = null
+    subtitle: String? = null,
+    isActivated: Boolean = false,
+    onClick: (() -> Unit)? = null
 ) {
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isActivated) 1f else 0f,
+        animationSpec = tween(300),
+        label = "glowAlpha"
+    )
+
     Surface(
         modifier = modifier
-            .heightIn(min = 160.dp),
+            .then(
+                if (glowAlpha > 0f) Modifier.neonGlow(
+                    color = gradientColors.first(),
+                    alpha = glowAlpha * 0.28f,
+                    radius = 16.dp,
+                    cornerRadius = 16.dp
+                ) else Modifier
+            )
+            .heightIn(min = 160.dp)
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() }
+                else Modifier
+            ),
         shape = RoundedCornerShape(16.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.6f),
-        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        border = if (isActivated) {
+            BorderStroke(1.5.dp, Brush.linearGradient(gradientColors))
+        } else {
+            BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        }
     ) {
         Column(
             modifier = Modifier
@@ -908,12 +997,41 @@ private fun SyncStatColumn(
 }
 
 @Composable
-private fun PowerConsumptionCard(energy: EnergyDashboard?) {
+private fun PowerConsumptionCard(
+    energy: EnergyDashboard?,
+    isActivated: Boolean = false,
+    onClick: (() -> Unit)? = null
+) {
+    val powerGradient = listOf(Color(0xFFF59E0B), Color(0xFFEF4444))
+
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (isActivated) 1f else 0f,
+        animationSpec = tween(300),
+        label = "powerGlowAlpha"
+    )
+
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (glowAlpha > 0f) Modifier.neonGlow(
+                    color = powerGradient.first(),
+                    alpha = glowAlpha * 0.28f,
+                    radius = 18.dp,
+                    cornerRadius = 16.dp
+                ) else Modifier
+            )
+            .then(
+                if (onClick != null) Modifier.clickable { onClick() }
+                else Modifier
+            ),
         shape = RoundedCornerShape(16.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.6f),
-        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        border = if (isActivated) {
+            BorderStroke(1.5.dp, Brush.linearGradient(powerGradient))
+        } else {
+            BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+        }
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -1095,6 +1213,37 @@ private fun PowerStatItem(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = Color(0xFF94A3B8)
+        )
+    }
+}
+
+/**
+ * Draws a soft neon glow behind the composable using a blurred rounded rect on the Canvas.
+ */
+private fun Modifier.neonGlow(
+    color: Color,
+    alpha: Float,
+    radius: Dp,
+    cornerRadius: Dp
+): Modifier = this.drawBehind {
+    val radiusPx = radius.toPx()
+    val cornerPx = cornerRadius.toPx()
+    drawIntoCanvas { canvas ->
+        val paint = Paint().also { p ->
+            p.asFrameworkPaint().apply {
+                isAntiAlias = true
+                this.color = color.copy(alpha = alpha).toArgb()
+                maskFilter = BlurMaskFilter(radiusPx, BlurMaskFilter.Blur.NORMAL)
+            }
+        }
+        canvas.drawRoundRect(
+            left = -radiusPx / 2,
+            top = -radiusPx / 2,
+            right = size.width + radiusPx / 2,
+            bottom = size.height + radiusPx / 2,
+            radiusX = cornerPx,
+            radiusY = cornerPx,
+            paint = paint
         )
     }
 }

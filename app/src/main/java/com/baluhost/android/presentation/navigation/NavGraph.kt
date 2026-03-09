@@ -6,6 +6,10 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.baluhost.android.presentation.ui.screens.detail.CpuDetailScreen
+import com.baluhost.android.presentation.ui.screens.detail.MemoryDetailScreen
+import com.baluhost.android.presentation.ui.screens.detail.PowerDetailScreen
+import com.baluhost.android.presentation.ui.screens.detail.StorageDetailScreen
 import com.baluhost.android.presentation.ui.screens.lock.LockScreen
 import com.baluhost.android.presentation.ui.screens.main.MainScreen
 import com.baluhost.android.presentation.ui.screens.media.MediaViewerScreen
@@ -162,5 +166,38 @@ fun NavGraph(
         composable(Screen.Permissions.route) {
             com.baluhost.android.presentation.ui.screens.permissions.PermissionsScreen()
         }
+
+        composable(Screen.CpuDetail.route) {
+            CpuDetailScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.MemoryDetail.route) {
+            MemoryDetailScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.PowerDetail.route) {
+            PowerDetailScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.StorageDetail.route) {
+            StorageDetailScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
     }
 }

@@ -23,4 +23,7 @@ interface SystemApi {
     
     @GET("system/storage/aggregated")
     suspend fun getStorageAggregated(): StorageAggregatedDto
+
+    @GET("system/smart/status")
+    suspend fun getSmartStatus(): SmartStatusResponseDto
 }

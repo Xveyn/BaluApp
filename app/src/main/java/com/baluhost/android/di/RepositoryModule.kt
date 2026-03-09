@@ -3,6 +3,7 @@ package com.baluhost.android.di
 import com.baluhost.android.data.repository.AuthRepositoryImpl
 import com.baluhost.android.data.repository.DeviceRepositoryImpl
 import com.baluhost.android.data.repository.FilesRepositoryImpl
+import com.baluhost.android.data.repository.MonitoringRepositoryImpl
 import com.baluhost.android.data.repository.OfflineQueueRepositoryImpl
 import com.baluhost.android.data.repository.SyncRepositoryImpl
 import com.baluhost.android.data.repository.SystemRepositoryImpl
@@ -10,6 +11,7 @@ import com.baluhost.android.data.repository.VpnRepositoryImpl
 import com.baluhost.android.domain.repository.AuthRepository
 import com.baluhost.android.domain.repository.DeviceRepository
 import com.baluhost.android.domain.repository.FilesRepository
+import com.baluhost.android.domain.repository.MonitoringRepository
 import com.baluhost.android.domain.repository.OfflineQueueRepository
 import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.repository.SystemRepository
@@ -68,4 +70,10 @@ abstract class RepositoryModule {
     abstract fun bindOfflineQueueRepository(
         offlineQueueRepositoryImpl: OfflineQueueRepositoryImpl
     ): OfflineQueueRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindMonitoringRepository(
+        monitoringRepositoryImpl: MonitoringRepositoryImpl
+    ): MonitoringRepository
 }
