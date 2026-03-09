@@ -81,6 +81,7 @@ class RegisterDeviceUseCase @Inject constructor(
             preferencesManager.saveUsername(response.user.username)
             preferencesManager.saveUserRole(response.user.role)
             preferencesManager.saveDeviceId(response.device.id)  // Already a String (UUID)
+            preferencesManager.saveVpnDeviceName(response.device.deviceName)
             
             Result.Success(
                 AuthResult(

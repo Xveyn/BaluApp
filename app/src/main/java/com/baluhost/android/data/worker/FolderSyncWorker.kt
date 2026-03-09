@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.data.notification.ServerConnectionMonitor
 import com.baluhost.android.data.notification.SyncNotificationManager
 import com.baluhost.android.domain.model.sync.*
 import com.baluhost.android.domain.repository.SyncRepository
@@ -30,7 +31,8 @@ class FolderSyncWorker @AssistedInject constructor(
     private val syncRepository: SyncRepository,
     private val preferencesManager: PreferencesManager,
     private val conflictDetectionService: ConflictDetectionService,
-    private val syncNotificationManager: SyncNotificationManager
+    private val syncNotificationManager: SyncNotificationManager,
+    private val serverConnectionMonitor: ServerConnectionMonitor
 ) : CoroutineWorker(appContext, workerParams) {
 
     private val localFolderScanner = LocalFolderScanner(appContext)
@@ -44,6 +46,7 @@ class FolderSyncWorker @AssistedInject constructor(
         val startTime = System.currentTimeMillis()
 
         Log.d(TAG, "Starting sync for folder: $folderId (manual=$isManual)")
+        serverConnectionMonitor.acquire("sync")
 
         try {
             // 1. Load folder config
@@ -75,7 +78,6 @@ class FolderSyncWorker @AssistedInject constructor(
 
             // 3. Scan local files
             setProgress(workDataOf(PROGRESS_STATUS to "scanning_local"))
-            syncNotificationManager.updateProgressNotification(folderId, folderName, 0, 1, "Lokale Dateien scannen...")
 
             val scanResult = localFolderScanner.scanFolder(
                 folderUri = folderConfig.localUri,
@@ -191,9 +193,6 @@ class FolderSyncWorker @AssistedInject constructor(
                         PROGRESS_CURRENT to (index + 1),
                         PROGRESS_TOTAL to totalActions
                     ))
-                    syncNotificationManager.updateProgressNotification(
-                        folderId, folderName, index + 1, totalActions, upload.relativePath
-                    )
 
                     try {
                         val localFileInfo = scanResult.fileList.find { it.relativePath == upload.relativePath }
@@ -201,10 +200,19 @@ class FolderSyncWorker @AssistedInject constructor(
                             // Copy URI content to temp file for upload
                             val tempFile = File.createTempFile("sync_upload_", null, applicationContext.cacheDir)
                             try {
-                                applicationContext.contentResolver.openInputStream(localFileInfo.uri)?.use { input ->
+                                val inputStream = applicationContext.contentResolver.openInputStream(localFileInfo.uri)
+                                if (inputStream == null) {
+                                    errors.add("Upload failed: ${upload.relativePath} - cannot read file")
+                                    continue
+                                }
+                                inputStream.use { input ->
                                     tempFile.outputStream().use { output ->
                                         input.copyTo(output)
                                     }
+                                }
+                                if (tempFile.length() == 0L && localFileInfo.size > 0) {
+                                    errors.add("Upload failed: ${upload.relativePath} - temp file empty after copy")
+                                    continue
                                 }
 
                                 val requestBody = tempFile.asRequestBody(
@@ -213,9 +221,18 @@ class FolderSyncWorker @AssistedInject constructor(
                                 val part = MultipartBody.Part.createFormData(
                                     "file", localFileInfo.name, requestBody
                                 )
+                                // Combine sync folder remote path with file's relative path
+                                // Backend expects full path from storage root, e.g. "sven/Documents/subfolder/file.txt"
+                                val fullRemotePath = buildString {
+                                    append(folderConfig.remotePath.trimEnd('/'))
+                                    if (upload.relativePath.isNotEmpty()) {
+                                        append('/')
+                                        append(upload.relativePath.trimStart('/'))
+                                    }
+                                }
                                 syncRepository.uploadFile(
                                     folderId.toLongOrNull() ?: 0L,
-                                    upload.relativePath,
+                                    fullRemotePath,
                                     part
                                 )
                                 filesUploaded++
@@ -246,14 +263,19 @@ class FolderSyncWorker @AssistedInject constructor(
                         PROGRESS_CURRENT to overallIndex,
                         PROGRESS_TOTAL to totalActions
                     ))
-                    syncNotificationManager.updateProgressNotification(
-                        folderId, folderName, overallIndex, totalActions, download.relativePath
-                    )
 
                     try {
+                        // Combine sync folder remote path with file's relative path
+                        val fullDownloadPath = buildString {
+                            append(folderConfig.remotePath.trimEnd('/'))
+                            if (download.relativePath.isNotEmpty()) {
+                                append('/')
+                                append(download.relativePath.trimStart('/'))
+                            }
+                        }
                         val responseBody = syncRepository.downloadFile(
                             folderId.toLongOrNull() ?: 0L,
-                            download.relativePath
+                            fullDownloadPath
                         )
 
                         // Write downloaded file to local folder via SAF
@@ -380,6 +402,8 @@ class FolderSyncWorker @AssistedInject constructor(
             }
 
             Result.retry()
+        } finally {
+            serverConnectionMonitor.release("sync")
         }
     }
 
@@ -388,6 +412,8 @@ class FolderSyncWorker @AssistedInject constructor(
         const val WORK_NAME = "folder_sync_work"
         const val INPUT_FOLDER_ID = "folder_id"
         const val INPUT_IS_MANUAL = "is_manual"
+
+        const val TAG_SYNC = "folder_sync"
 
         const val PROGRESS_STATUS = "status"
         const val PROGRESS_FILE = "file"
@@ -402,6 +428,7 @@ class FolderSyncWorker @AssistedInject constructor(
 
             return OneTimeWorkRequestBuilder<FolderSyncWorker>()
                 .setInputData(inputData)
+                .addTag(TAG_SYNC)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -410,13 +437,15 @@ class FolderSyncWorker @AssistedInject constructor(
                 .build()
         }
 
-        fun createPeriodicRequest(folderId: String): PeriodicWorkRequest {
+        fun createPeriodicRequest(folderId: String, intervalMinutes: Long = 360L): PeriodicWorkRequest {
             val inputData = workDataOf(INPUT_FOLDER_ID to folderId)
+            val safeInterval = maxOf(intervalMinutes, 15L) // WorkManager minimum is 15 minutes
 
             return PeriodicWorkRequestBuilder<FolderSyncWorker>(
-                6, TimeUnit.HOURS
+                safeInterval, TimeUnit.MINUTES
             )
                 .setInputData(inputData)
+                .addTag(TAG_SYNC)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)

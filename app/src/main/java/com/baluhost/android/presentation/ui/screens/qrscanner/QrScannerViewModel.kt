@@ -50,30 +50,23 @@ class QrScannerViewModel @Inject constructor(
                 
                 when (result) {
                     is Result.Success -> {
-                        // Import VPN config if available
-                        var vpnImported = false
+                        // Import VPN config if available (inline, no fire-and-forget)
+                        var vpnConfigured = false
                         registrationData.vpnConfig?.let { vpnConfig ->
-                            viewModelScope.launch {
-                                val vpnResult = importVpnConfigUseCase(
-                                    configBase64 = vpnConfig,
-                                    autoRegister = true
-                                )
-                                when (vpnResult) {
-                                    is Result.Success -> {
-                                        android.util.Log.d("QrScanner", "VPN config imported: ${vpnResult.data.serverEndpoint}")
-                                        vpnImported = true
-                                    }
-                                    is Result.Error -> {
-                                        android.util.Log.e("QrScanner", "VPN import failed: ${vpnResult.exception.message}")
-                                    }
-                                    else -> {}
-                                }
+                            val vpnResult = importVpnConfigUseCase(
+                                configBase64 = vpnConfig
+                            )
+                            vpnConfigured = vpnResult is Result.Success
+                            if (vpnResult is Result.Success) {
+                                android.util.Log.d("QrScanner", "VPN config imported: ${vpnResult.data.serverEndpoint}")
+                            } else if (vpnResult is Result.Error) {
+                                android.util.Log.e("QrScanner", "VPN import failed: ${vpnResult.exception.message}")
                             }
                         }
-                        
+
                         _uiState.value = QrScannerState.Success(
                             authResult = result.data,
-                            vpnConfigured = vpnImported || registrationData.vpnConfig != null
+                            vpnConfigured = vpnConfigured
                         )
                     }
                     is Result.Error -> {

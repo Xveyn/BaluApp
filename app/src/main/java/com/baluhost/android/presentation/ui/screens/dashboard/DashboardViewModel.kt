@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.model.OperationStatus
 import com.baluhost.android.domain.model.RaidArray
@@ -13,6 +14,7 @@ import com.baluhost.android.domain.repository.OfflineQueueRepository
 import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
+import com.baluhost.android.domain.usecase.system.GetEnergyDashboardUseCase
 import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
 import com.baluhost.android.util.NetworkStateManager
@@ -34,6 +36,7 @@ class DashboardViewModel @Inject constructor(
     private val getFilesUseCase: GetFilesUseCase,
     private val getCacheStatsUseCase: GetCacheStatsUseCase,
     private val getSystemTelemetryUseCase: GetSystemTelemetryUseCase,
+    private val getEnergyDashboardUseCase: GetEnergyDashboardUseCase,
     private val getRaidStatusUseCase: GetRaidStatusUseCase,
     private val preferencesManager: PreferencesManager,
     private val networkStateManager: NetworkStateManager,
@@ -94,8 +97,10 @@ class DashboardViewModel @Inject constructor(
                 val telemetryResult = getSystemTelemetryUseCase()
                 val telemetry = when (telemetryResult) {
                     is Result.Success -> {
-                        Log.d("DashboardViewModel", "Telemetry loaded: CPU=${telemetryResult.data.cpu.usagePercent}%, Memory=${telemetryResult.data.memory.usagePercent}%, Disk=${telemetryResult.data.disk.usagePercent}%")
-                        telemetryResult.data
+                        val d = telemetryResult.data
+                        Log.d("DashboardViewModel", "Telemetry loaded: CPU=${d.cpu.usagePercent}%, Memory=${d.memory.usagePercent}%, Disk=${d.disk.usagePercent}%")
+                        Log.d("DashboardViewModel", "Hardware: cpuModel=${d.cpu.model}, cpuFreq=${d.cpu.frequencyMhz}, cpuTemp=${d.cpu.temperatureCelsius}, ramType=${d.memory.type}, ramSpeed=${d.memory.speedMts}")
+                        d
                     }
                     is Result.Error -> {
                         Log.e("DashboardViewModel", "Failed to load telemetry", telemetryResult.exception)
@@ -118,20 +123,35 @@ class DashboardViewModel @Inject constructor(
                     else -> emptyList()
                 }
                 
+                // Load energy dashboard
+                val energyResult = getEnergyDashboardUseCase()
+                val energy = when (energyResult) {
+                    is Result.Success -> {
+                        Log.d("DashboardViewModel", "Energy loaded: ${energyResult.data.currentWatts}W")
+                        energyResult.data
+                    }
+                    is Result.Error -> {
+                        Log.e("DashboardViewModel", "Failed to load energy", energyResult.exception)
+                        null
+                    }
+                    else -> null
+                }
+
                 // Load recent files (from root)
                 val filesResult = getFilesUseCase("/", forceRefresh = false)
                 val recentFiles = when (filesResult) {
                     is Result.Success -> filesResult.data.take(5)
                     else -> emptyList()
                 }
-                
+
                 // Load cache stats
                 val cacheStats = getCacheStatsUseCase()
-                
+
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     username = username,
                     telemetry = telemetry,
+                    energy = energy,
                     raidArrays = raidArrays,
                     recentFiles = recentFiles,
                     cacheFileCount = cacheStats.fileCount,
@@ -165,9 +185,17 @@ class DashboardViewModel @Inject constructor(
                     is Result.Error -> emptyList()
                     else -> emptyList()
                 }
-                
+
+                val energyResult = getEnergyDashboardUseCase()
+                val energy = when (energyResult) {
+                    is Result.Success -> energyResult.data
+                    is Result.Error -> null
+                    else -> null
+                }
+
                 _uiState.value = _uiState.value.copy(
                     telemetry = telemetry,
+                    energy = energy,
                     raidArrays = raidArrays
                 )
             } catch (e: Exception) {
@@ -255,6 +283,7 @@ data class DashboardUiState(
     val isLoading: Boolean = false,
     val username: String = "",
     val telemetry: SystemInfo? = null,
+    val energy: EnergyDashboard? = null,
     val raidArrays: List<RaidArray> = emptyList(),
     val recentFiles: List<FileItem> = emptyList(),
     val cacheFileCount: Int = 0,

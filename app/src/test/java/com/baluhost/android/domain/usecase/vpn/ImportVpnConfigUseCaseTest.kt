@@ -14,14 +14,12 @@ import java.util.Base64
 class ImportVpnConfigUseCaseTest {
     
     private lateinit var preferencesManager: PreferencesManager
-    private lateinit var context: android.content.Context
     private lateinit var importVpnConfigUseCase: ImportVpnConfigUseCase
-    
+
     @Before
     fun setup() {
         preferencesManager = mockk(relaxed = true)
-        context = mockk(relaxed = true)
-        importVpnConfigUseCase = ImportVpnConfigUseCase(context, preferencesManager)
+        importVpnConfigUseCase = ImportVpnConfigUseCase(preferencesManager)
     }
     
     @After
@@ -62,6 +60,8 @@ class ImportVpnConfigUseCaseTest {
         
         coVerify(exactly = 1) {
             preferencesManager.saveVpnConfig(configString)
+            preferencesManager.saveVpnAssignedIp("10.0.0.2")
+            preferencesManager.saveVpnPublicKey("serverkeyhere987654321=")
         }
     }
     

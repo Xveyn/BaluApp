@@ -25,6 +25,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
@@ -184,7 +185,17 @@ fun DashboardScreen(
                             SystemMetricCard(
                                 title = "CPU USAGE",
                                 value = "${telemetry?.cpu?.usagePercent?.toInt() ?: 0}%",
-                                meta = "${telemetry?.cpu?.cores ?: 0} cores active",
+                                subtitle = telemetry?.cpu?.model,
+                                meta = buildString {
+                                    append("${telemetry?.cpu?.cores ?: 0} cores active")
+                                    telemetry?.cpu?.frequencyMhz?.let { mhz ->
+                                        if (mhz >= 1000) append(" \u2022 ${"%.1f".format(mhz / 1000)} GHz")
+                                        else append(" \u2022 ${mhz.toInt()} MHz")
+                                    }
+                                    telemetry?.cpu?.temperatureCelsius?.let { temp ->
+                                        append(" \u2022 ${"%.0f".format(temp)}\u00B0C")
+                                    }
+                                },
                                 delta = "Live",
                                 deltaTone = DeltaTone.LIVE,
                                 progress = telemetry?.cpu?.usagePercent?.toFloat() ?: 0f,
@@ -192,10 +203,17 @@ fun DashboardScreen(
                                 gradientColors = listOf(Color(0xFF8B5CF6), Color(0xFFD946EF)),
                                 modifier = Modifier.weight(1f)
                             )
-                            
+
                             SystemMetricCard(
                                 title = "MEMORY",
                                 value = formatFileSize(telemetry?.memory?.usedBytes ?: 0),
+                                subtitle = buildString {
+                                    val memType = telemetry?.memory?.type
+                                    val memSpeed = telemetry?.memory?.speedMts
+                                    if (memType != null) append(memType)
+                                    if (memType != null && memSpeed != null) append(" ")
+                                    if (memSpeed != null) append("$memSpeed MT/s")
+                                }.ifEmpty { null },
                                 meta = "of ${formatFileSize(telemetry?.memory?.totalBytes ?: 0)}",
                                 delta = "Live",
                                 deltaTone = DeltaTone.LIVE,
@@ -236,6 +254,9 @@ fun DashboardScreen(
                         }
                     }
                     
+                    // Power Consumption Card
+                    PowerConsumptionCard(energy = uiState.energy)
+
                     // Sync Summary Card
                     SyncSummaryCard(
                         pendingCount = uiState.pendingSyncCount,
@@ -246,9 +267,11 @@ fun DashboardScreen(
 
                     // RAID Arrays Section
                     if (uiState.raidArrays.isNotEmpty()) {
-                        GlassCard(
+                        Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            intensity = GlassIntensity.Medium
+                            shape = RoundedCornerShape(16.dp),
+                            color = Color(0xFF0F172A).copy(alpha = 0.6f),
+                            border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
                         ) {
                             Column(
                                 modifier = Modifier.padding(16.dp),
@@ -284,9 +307,11 @@ fun DashboardScreen(
                     }
                     
                     // Recent Activity Section
-                    GlassCard(
+                    Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        intensity = GlassIntensity.Medium
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+                        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
                     ) {
                         Column(
                             modifier = Modifier.padding(16.dp),
@@ -367,11 +392,12 @@ private fun SystemMetricCard(
     progress: Float,
     icon: ImageVector,
     gradientColors: List<Color>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    subtitle: String? = null
 ) {
     Surface(
         modifier = modifier
-            .height(160.dp),
+            .heightIn(min = 160.dp),
         shape = RoundedCornerShape(16.dp),
         color = Color(0xFF0F172A).copy(alpha = 0.6f),
         border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
@@ -403,8 +429,18 @@ private fun SystemMetricCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF94A3B8),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
                 }
-                
+
                 Box(
                     modifier = Modifier
                         .size(44.dp)
@@ -420,7 +456,7 @@ private fun SystemMetricCard(
                     )
                 }
             }
-            
+
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -445,7 +481,7 @@ private fun SystemMetricCard(
                         }
                     )
                 }
-                
+
                 // Progress bar
                 Box(
                     modifier = Modifier
@@ -663,14 +699,16 @@ private fun ServerStatusStrip(
 ) {
     var showPowerDialog by remember { mutableStateOf(false) }
 
-    GlassCard(
+    Surface(
         modifier = Modifier.fillMaxWidth(),
-        intensity = GlassIntensity.Light,
         shape = RoundedCornerShape(16.dp),
-        padding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -761,13 +799,16 @@ private fun SyncSummaryCard(
         Modifier
     }
 
-    GlassCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .then(borderModifier),
-        intensity = GlassIntensity.Medium
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
     ) {
         Column(
+            modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -862,6 +903,198 @@ private fun SyncStatColumn(
             text = label,
             style = MaterialTheme.typography.labelSmall,
             color = Slate400
+        )
+    }
+}
+
+@Composable
+private fun PowerConsumptionCard(energy: EnergyDashboard?) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color(0xFF0F172A).copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, Color(0xFF1E293B).copy(alpha = 0.4f))
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Header
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column {
+                    Text(
+                        text = "ENERGY MONITORING",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF64748B),
+                        letterSpacing = 1.2.sp
+                    )
+                    Text(
+                        text = "Power Consumption",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFFF59E0B), Color(0xFFEF4444))
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Bolt,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+            }
+
+            if (energy == null) {
+                // No data state
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PowerOff,
+                        contentDescription = null,
+                        tint = Color(0xFF64748B),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Keine Energiedaten verfügbar",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF64748B)
+                    )
+                }
+            } else {
+                // Current power - big number
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "%.1f".format(energy.currentWatts),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "W",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color(0xFF94A3B8),
+                        modifier = Modifier.padding(bottom = 4.dp)
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (energy.isOnline) Color(0xFF10B981).copy(alpha = 0.15f)
+                                else Color(0xFFEF4444).copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = if (energy.isOnline) "Live" else "Offline",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (energy.isOnline) Color(0xFF10B981) else Color(0xFFEF4444),
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+
+                // Stats row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    PowerStatItem(
+                        label = "Heute",
+                        value = "%.2f kWh".format(energy.todayKwh)
+                    )
+                    PowerStatItem(
+                        label = "Ø Heute",
+                        value = "%.0f W".format(energy.todayAvgWatts)
+                    )
+                    PowerStatItem(
+                        label = "Monat",
+                        value = "%.1f kWh".format(energy.monthKwh)
+                    )
+                }
+
+                // Min/Max bar
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Min: ${"%.0f".format(energy.todayMinWatts)} W",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+                    Text(
+                        text = "Max: ${"%.0f".format(energy.todayMaxWatts)} W",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF94A3B8)
+                    )
+                }
+
+                // Power usage bar (current relative to max today)
+                val maxWatts = energy.todayMaxWatts.coerceAtLeast(1.0)
+                val progress = (energy.currentWatts / maxWatts).toFloat().coerceIn(0f, 1f)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(Color(0xFF1E293B))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(progress)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFFF59E0B), Color(0xFFEF4444))
+                                )
+                            )
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PowerStatItem(
+    label: String,
+    value: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = Color.White
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF94A3B8)
         )
     }
 }

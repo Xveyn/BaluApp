@@ -6,6 +6,7 @@ import android.net.VpnService
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
@@ -28,6 +29,7 @@ import com.baluhost.android.presentation.ui.components.GradientButton
 import com.baluhost.android.presentation.ui.components.defaultGradient
 import com.baluhost.android.presentation.ui.components.errorGradient
 import com.baluhost.android.presentation.ui.theme.*
+import com.baluhost.android.service.vpn.BaluHostVpnService
 
 /**
  * VPN Screen - VPN connection management with dark glassmorphism design.
@@ -46,7 +48,16 @@ fun VpnScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
+            BaluHostVpnService.clearPermissionRequest()
             viewModel.connect()
+        }
+    }
+
+    // Observe permission request from VPN service (Samsung workaround)
+    val permissionIntent by BaluHostVpnService.needsPermission.collectAsState()
+    LaunchedEffect(permissionIntent) {
+        permissionIntent?.let { intent ->
+            vpnPermissionLauncher.launch(intent)
         }
     }
 
@@ -114,6 +125,47 @@ fun VpnScreen(
                     fontWeight = FontWeight.Bold,
                     color = if (uiState.isConnected) Green500 else Color.White
                 )
+
+                // VPN Type Selector
+                if (uiState.availableTypes.size > 1) {
+                    val typeLabels = mapOf(
+                        "fritzbox" to "FritzBox",
+                        "wireguard" to "WireGuard"
+                    )
+                    SingleChoiceSegmentedButtonRow(
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        uiState.availableTypes.forEachIndexed { index, type ->
+                            SegmentedButton(
+                                selected = type == uiState.selectedType,
+                                onClick = { viewModel.onTypeSelected(type) },
+                                shape = SegmentedButtonDefaults.itemShape(
+                                    index = index,
+                                    count = uiState.availableTypes.size
+                                ),
+                                enabled = !uiState.isLoading && !uiState.isConnected,
+                                colors = SegmentedButtonDefaults.colors(
+                                    activeContainerColor = Slate700,
+                                    activeContentColor = Color.White,
+                                    inactiveContainerColor = Slate900.copy(alpha = 0.5f),
+                                    inactiveContentColor = Slate400,
+                                    disabledActiveContainerColor = Slate700.copy(alpha = 0.5f),
+                                    disabledActiveContentColor = Slate400,
+                                    disabledInactiveContainerColor = Slate900.copy(alpha = 0.3f),
+                                    disabledInactiveContentColor = Slate500
+                                ),
+                                border = SegmentedButtonDefaults.borderStroke(
+                                    color = Slate600.copy(alpha = 0.5f)
+                                )
+                            ) {
+                                Text(
+                                    text = typeLabels[type] ?: type.replaceFirstChar { it.uppercase() },
+                                    fontWeight = if (type == uiState.selectedType) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                }
 
                 // Connection Info Card
                 if (uiState.hasConfig) {

@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -68,7 +69,10 @@ fun QrScannerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scan QR Code") },
+                title = { Text("QR-Code scannen", color = Color.White) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent
+                ),
                 navigationIcon = {
                     if (uiState !is QrScannerState.Processing) {
                         IconButton(onClick = onNavigateBack) {
@@ -134,17 +138,19 @@ private fun CameraPermissionRequest(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = "Camera Permission Required",
+            text = "Kamera-Berechtigung erforderlich",
             style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            color = Color.White
         )
-        
+
         Spacer(modifier = Modifier.height(16.dp))
-        
+
         Text(
-            text = "Camera access is needed to scan QR codes for device registration",
+            text = "Kamerazugriff wird benötigt, um QR-Codes für die Geräteregistrierung zu scannen",
             style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            color = Color(0xFF94A3B8)
         )
         
         Spacer(modifier = Modifier.height(32.dp))
@@ -157,7 +163,7 @@ private fun CameraPermissionRequest(
                 contentColor = MaterialTheme.colorScheme.onPrimary
             )
         ) {
-            Text("Grant Permission")
+            Text("Berechtigung erteilen")
         }
     }
 }
@@ -331,7 +337,8 @@ private fun CameraErrorFallback(
         Text(
             text = "Kamera nicht verfügbar",
             style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            color = Color.White
         )
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -339,7 +346,8 @@ private fun CameraErrorFallback(
         Text(
             text = "Die Kamera konnte nicht gestartet werden. Du kannst die Server-Daten auch manuell eingeben.",
             style = MaterialTheme.typography.bodyMedium,
-            textAlign = TextAlign.Center
+            textAlign = TextAlign.Center,
+            color = Color(0xFF94A3B8)
         )
 
         Spacer(modifier = Modifier.height(32.dp))
@@ -451,7 +459,8 @@ private fun ProcessingOverlay(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Registrierung erfolgreich",
-                        style = MaterialTheme.typography.headlineSmall
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = Color.White
                     )
                     if (vpnConfigured) {
                         Spacer(modifier = Modifier.height(8.dp))
@@ -466,7 +475,8 @@ private fun ProcessingOverlay(
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = "Gerät wird registriert...",
-                        style = MaterialTheme.typography.bodyLarge
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White
                     )
                 }
             }
@@ -501,16 +511,18 @@ private fun ErrorOverlay(
                 Spacer(modifier = Modifier.height(16.dp))
                 
                 Text(
-                    text = "Registration Failed",
-                    style = MaterialTheme.typography.headlineSmall
+                    text = "Registrierung fehlgeschlagen",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Text(
                     text = message,
                     style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
+                    color = Color(0xFF94A3B8)
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
@@ -523,7 +535,7 @@ private fun ErrorOverlay(
                         contentColor = MaterialTheme.colorScheme.onPrimary
                     )
                 ) {
-                    Text("Try Again")
+                    Text("Erneut versuchen")
                 }
             }
         }

@@ -58,7 +58,7 @@ fun NavGraph(
                     }
                 },
                 onComplete = {
-                    navController.navigate(Screen.Main.route) {
+                    navController.navigate(Screen.QrScanner.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }

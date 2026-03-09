@@ -167,60 +167,32 @@ class SettingsViewModel @Inject constructor(
     fun deleteDevice() {
         viewModelScope.launch {
             val deviceId = _uiState.value.deviceId
-            
-            // Log current state for debugging
-            android.util.Log.d("SettingsViewModel", "Attempting to delete device")
-            android.util.Log.d("SettingsViewModel", "Device ID from state: $deviceId")
-            android.util.Log.d("SettingsViewModel", "Server URL: ${_uiState.value.serverUrl}")
-            
-            if (deviceId == null) {
-                android.util.Log.e("SettingsViewModel", "Device ID is null!")
-                _uiState.update { it.copy(error = "Device ID not found. Please try logging in again.") }
-                return@launch
-            }
-            
+
+            android.util.Log.d("SettingsViewModel", "Attempting to delete device: $deviceId")
+
             _uiState.update { it.copy(isDeleting = true, error = null) }
-            
-            try {
-                android.util.Log.d("SettingsViewModel", "Calling deviceRepository.deleteDevice($deviceId)")
-                
-                // Delete device from server
-                deviceRepository.deleteDevice(deviceId)
-                
-                android.util.Log.d("SettingsViewModel", "Device deleted successfully, clearing local data")
-                
-                // Clear all local data (including tokens, server URL, etc.)
-                preferencesManager.clearAll()
-                
-                // Reset onboarding status so user goes back to onboarding
-                preferencesManager.saveOnboardingCompleted(false)
-                
-                // Notify success - navigation will be handled by UI
-                _uiState.update { it.copy(
-                    isDeleting = false,
-                    deviceDeleted = true
-                ) }
-            } catch (e: Exception) {
-                android.util.Log.e("SettingsViewModel", "Error deleting device: ${e.message}", e)
-                
-                // Provide helpful error messages
-                val errorMessage = when {
-                    e.message?.contains("401", ignoreCase = true) == true -> 
-                        "Authentifizierung erforderlich. Bitte melden Sie sich erneut an."
-                    e.message?.contains("403", ignoreCase = true) == true -> 
-                        "Nicht berechtigt, dieses Gerät zu löschen."
-                    e.message?.contains("Network error", ignoreCase = true) == true -> 
-                        "Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut."
-                    e.message?.contains("404", ignoreCase = true) == true -> 
-                        "Gerät nicht gefunden. Es wurde möglicherweise bereits gelöscht."
-                    else -> "Gerätelöschung fehlgeschlagen: ${e.message}"
+
+            // Best-effort: try to notify server, but always clear locally
+            if (deviceId != null) {
+                try {
+                    deviceRepository.deleteDevice(deviceId)
+                    android.util.Log.d("SettingsViewModel", "Device deleted on server")
+                } catch (e: Exception) {
+                    android.util.Log.w("SettingsViewModel", "Server deletion failed (proceeding with local cleanup): ${e.message}")
                 }
-                
-                _uiState.update { it.copy(
-                    isDeleting = false,
-                    error = errorMessage
-                ) }
             }
+
+            // Always clear local data regardless of server response
+            preferencesManager.clearAll()
+            preferencesManager.saveOnboardingCompleted(false)
+            securePreferences.clearAll()
+
+            android.util.Log.d("SettingsViewModel", "Local data cleared, navigating to setup")
+
+            _uiState.update { it.copy(
+                isDeleting = false,
+                deviceDeleted = true
+            ) }
         }
     }
     

@@ -360,6 +360,47 @@ class PreferencesManager @Inject constructor(
         emit(summary)
     }
     
+    // Sync Schedules cache (for offline availability)
+    suspend fun saveSyncSchedules(schedules: List<com.baluhost.android.domain.model.sync.SyncSchedule>) {
+        val key = stringPreferencesKey("sync_schedules_cache")
+        val serialized = schedules.joinToString("|||") { s ->
+            "${s.scheduleId}::${s.deviceId}::${s.scheduleType.toApiString()}::" +
+            "${s.timeOfDay}::${s.dayOfWeek ?: "null"}::${s.dayOfMonth ?: "null"}::" +
+            "${s.nextRunAt ?: "null"}::${s.lastRunAt ?: "null"}::" +
+            "${s.enabled}::${s.syncDeletions}::${s.resolveConflicts}"
+        }
+        dataStore.edit { prefs -> prefs[key] = serialized }
+    }
+
+    suspend fun getCachedSyncSchedules(): List<com.baluhost.android.domain.model.sync.SyncSchedule> {
+        val key = stringPreferencesKey("sync_schedules_cache")
+        val cached = dataStore.data.map { prefs -> prefs[key] }.first()
+        if (cached.isNullOrEmpty()) return emptyList()
+
+        return cached.split("|||").mapNotNull { entry ->
+            try {
+                val parts = entry.split("::")
+                if (parts.size >= 11) {
+                    com.baluhost.android.domain.model.sync.SyncSchedule(
+                        scheduleId = parts[0].toInt(),
+                        deviceId = parts[1],
+                        scheduleType = com.baluhost.android.domain.model.sync.ScheduleType.fromString(parts[2]),
+                        timeOfDay = parts[3],
+                        dayOfWeek = parts[4].takeIf { it != "null" }?.toIntOrNull(),
+                        dayOfMonth = parts[5].takeIf { it != "null" }?.toIntOrNull(),
+                        nextRunAt = parts[6].takeIf { it != "null" }?.toLongOrNull(),
+                        lastRunAt = parts[7].takeIf { it != "null" }?.toLongOrNull(),
+                        enabled = parts[8].toBoolean(),
+                        syncDeletions = parts[9].toBoolean(),
+                        resolveConflicts = parts[10]
+                    )
+                } else null
+            } catch (e: Exception) {
+                null
+            }
+        }
+    }
+
     // Clear all tokens (on logout or auth failure)
     suspend fun clearTokens() {
         securePreferences.clearTokens()
@@ -413,7 +454,15 @@ class PreferencesManager @Inject constructor(
     fun getVpnAssignedIp(): Flow<String?> {
         return dataStore.data.map { prefs -> prefs[stringPreferencesKey("vpn_assigned_ip")] }
     }
-    
+
+    suspend fun saveVpnType(type: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("vpn_type")] = type }
+    }
+
+    fun getVpnType(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("vpn_type")] }
+    }
+
     // Clear all data
     suspend fun clearAll() {
         dataStore.edit { prefs -> prefs.clear() }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.baluhost.android.BuildConfig
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.AuthApi
+import com.baluhost.android.data.remote.api.EnergyApi
 import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.data.remote.api.SyncApi
@@ -85,6 +86,7 @@ object NetworkModule {
             .connectTimeout(Constants.CONNECT_TIMEOUT, TimeUnit.SECONDS)
             .readTimeout(Constants.READ_TIMEOUT, TimeUnit.SECONDS)
             .writeTimeout(Constants.WRITE_TIMEOUT, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
             .build()
     }
     
@@ -134,6 +136,12 @@ object NetworkModule {
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi {
         return retrofit.create(SyncApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideEnergyApi(retrofit: Retrofit): EnergyApi {
+        return retrofit.create(EnergyApi::class.java)
     }
     
     @Provides

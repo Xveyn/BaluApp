@@ -1,7 +1,10 @@
 package com.baluhost.android.data.remote.api
 
+import com.baluhost.android.data.remote.dto.FetchConfigByTypeRequest
+import com.baluhost.android.data.remote.dto.FetchConfigByTypeResponse
 import com.baluhost.android.data.remote.dto.GenerateVpnConfigRequest
 import com.baluhost.android.data.remote.dto.UpdateVpnClientRequest
+import com.baluhost.android.data.remote.dto.VpnAvailableTypesResponse
 import com.baluhost.android.data.remote.dto.VpnClientDto
 import com.baluhost.android.data.remote.dto.VpnClientListResponse
 import com.baluhost.android.data.remote.dto.VpnConfigResponse
@@ -53,4 +56,10 @@ interface VpnApi {
     
     @GET("vpn/status")
     suspend fun getStatus(): VpnStatusResponse
+
+    @GET("vpn/available-types")
+    suspend fun getAvailableTypes(): VpnAvailableTypesResponse
+
+    @POST("vpn/fetch-config-by-type")
+    suspend fun fetchConfigByType(@Body request: FetchConfigByTypeRequest): FetchConfigByTypeResponse
 }

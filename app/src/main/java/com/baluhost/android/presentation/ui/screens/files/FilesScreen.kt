@@ -5,12 +5,14 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -26,6 +28,7 @@ import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -156,22 +159,13 @@ fun FilesScreen(
                 modifier = Modifier.weight(1f),
                 topBar = {
                 TopAppBar(
-                    title = { 
-                        Column {
-                            Text(
-                                "Dateien",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = Slate100
-                            )
-                            if (uiState.currentPath.isNotEmpty()) {
-                                Text(
-                                    text = "/${uiState.currentPath}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = Slate400
-                                )
-                            }
-                        }
+                    title = {
+                        Text(
+                            "Dateien",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = Slate100
+                        )
                     },
                     navigationIcon = {
                         if (uiState.currentPath.isNotEmpty()) {
@@ -278,80 +272,155 @@ fun FilesScreen(
                             }
                         }
                         else -> {
-                            // Bulk Action Bar (when in selection mode)
-                            if (uiState.isSelectionMode) {
-                                BulkActionBar(
-                                    selectedCount = uiState.selectedFiles.size,
-                                    onSelectAll = { viewModel.selectAll() },
-                                    onDeselectAll = { viewModel.deselectAll() },
-                                    onDelete = { 
-                                        // Show confirmation dialog first
-                                        showDeleteDialog = uiState.selectedFiles.firstOrNull() 
-                                    },
-                                    onDownload = { viewModel.downloadSelectedFiles() },
-                                    onMove = { showFolderPicker = true },
-                                    onCancel = { viewModel.toggleSelectionMode() }
-                                )
-                            }
-                            
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                items(uiState.files) { file ->
-                                    GlassFileListItem(
-                                        file = file,
-                                        isSelectionMode = uiState.isSelectionMode,
-                                        isSelected = file in uiState.selectedFiles,
-                                        onFileClick = {
-                                            if (uiState.isSelectionMode) {
-                                                // In selection mode, clicking toggles selection
-                                                viewModel.toggleFileSelection(file)
-                                            } else {
-                                                // Normal click behavior
-                                                android.util.Log.d("FilesScreen", "Clicked file: ${file.name}, mimeType: ${file.mimeType}, isDirectory: ${file.isDirectory}")
-                                                
-                                                when {
-                                                    file.isDirectory -> {
-                                                        viewModel.navigateToFolder(file.name)
-                                                    }
-                                                    file.mimeType?.startsWith("image/") == true ||
-                                                    file.mimeType?.startsWith("video/") == true ||
-                                                    file.mimeType?.startsWith("audio/") == true -> {
-                                                        // Show small overlay preview instead of immediately navigating
-                                                        android.util.Log.d("FilesScreen", "Opening preview for ${file.name}")
-                                                        val fileUrl = viewModel.getFileDownloadUrl(file.path)
-                                                        android.util.Log.d("FilesScreen", "previewUrl = $fileUrl")
-                                                        floatingPreviewUrl = fileUrl
-                                                        // tapping the overlay will open full viewer
-                                                    }
-                                                    else -> {
-                                                        android.util.Log.d("FilesScreen", "Unknown file type for ${file.name}, mimeType = ${file.mimeType}")
-                                                    }
-                                                }
-                                            }
+                            Column(modifier = Modifier.fillMaxSize()) {
+                                // Bulk Action Bar (when in selection mode)
+                                if (uiState.isSelectionMode) {
+                                    BulkActionBar(
+                                        selectedCount = uiState.selectedFiles.size,
+                                        onSelectAll = { viewModel.selectAll() },
+                                        onDeselectAll = { viewModel.deselectAll() },
+                                        onDelete = {
+                                            showDeleteDialog = uiState.selectedFiles.firstOrNull()
                                         },
-                                        onDeleteClick = {
-                                            showDeleteDialog = file
-                                        },
-                                        onLongClick = {
-                                            // Long-click to enter selection mode
-                                            if (!uiState.isSelectionMode) {
-                                                viewModel.toggleSelectionMode()
-                                                viewModel.toggleFileSelection(file)
-                                            }
-                                        },
-                                        onPreviewClick = {
-                                            // preview button directly sets floating preview
-                                            if (!file.isDirectory && (file.mimeType?.startsWith("image/") == true || file.mimeType?.startsWith("video/") == true)) {
-                                                floatingPreviewUrl = viewModel.getFileDownloadUrl(file.path)
-                                            }
-                                        }
+                                        onDownload = { viewModel.downloadSelectedFiles() },
+                                        onMove = { showFolderPicker = true },
+                                        onCancel = { viewModel.toggleSelectionMode() }
                                     )
                                 }
+
+                                // Breadcrumb navigation
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        onClick = { viewModel.navigateToPath("") },
+                                        shape = RoundedCornerShape(20.dp),
+                                        color = Slate800.copy(alpha = 0.6f),
+                                        border = BorderStroke(1.dp, Slate700.copy(alpha = 0.5f))
+                                    ) {
+                                        Text(
+                                            text = "HOME",
+                                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Slate300,
+                                            letterSpacing = 2.sp
+                                        )
+                                    }
+
+                                    if (uiState.currentPath.isNotEmpty()) {
+                                        val segments = uiState.currentPath.split("/")
+                                        segments.forEachIndexed { index, segment ->
+                                            Text(
+                                                text = "\u203A",
+                                                color = Slate500,
+                                                style = MaterialTheme.typography.bodyLarge
+                                            )
+                                            Surface(
+                                                onClick = {
+                                                    viewModel.navigateToPath(
+                                                        segments.take(index + 1).joinToString("/")
+                                                    )
+                                                },
+                                                shape = RoundedCornerShape(20.dp),
+                                                color = Slate800.copy(alpha = 0.6f),
+                                                border = BorderStroke(1.dp, Slate700.copy(alpha = 0.5f))
+                                            ) {
+                                                Text(
+                                                    text = segment.uppercase(),
+                                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Slate300,
+                                                    letterSpacing = 2.sp
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // File list card
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
+                                        .padding(horizontal = 16.dp)
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(Slate900.copy(alpha = 0.55f))
+                                        .border(
+                                            1.dp,
+                                            Slate800.copy(alpha = 0.6f),
+                                            RoundedCornerShape(16.dp)
+                                        ),
+                                    contentPadding = PaddingValues(bottom = 8.dp)
+                                ) {
+                                    // NAME header
+                                    item {
+                                        Text(
+                                            text = "NAME",
+                                            modifier = Modifier.padding(
+                                                horizontal = 20.dp,
+                                                vertical = 14.dp
+                                            ),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Slate400,
+                                            letterSpacing = 2.sp
+                                        )
+                                        HorizontalDivider(
+                                            color = Slate700.copy(alpha = 0.5f),
+                                            thickness = 0.5.dp
+                                        )
+                                    }
+
+                                    // File items
+                                    itemsIndexed(uiState.files) { index, file ->
+                                        GlassFileListItem(
+                                            file = file,
+                                            isSelectionMode = uiState.isSelectionMode,
+                                            isSelected = file in uiState.selectedFiles,
+                                            onFileClick = {
+                                                if (uiState.isSelectionMode) {
+                                                    viewModel.toggleFileSelection(file)
+                                                } else {
+                                                    when {
+                                                        file.isDirectory -> {
+                                                            viewModel.navigateToFolder(file.name)
+                                                        }
+                                                        file.mimeType?.startsWith("image/") == true ||
+                                                        file.mimeType?.startsWith("video/") == true ||
+                                                        file.mimeType?.startsWith("audio/") == true -> {
+                                                            floatingPreviewUrl = viewModel.getFileDownloadUrl(file.path)
+                                                        }
+                                                        else -> {}
+                                                    }
+                                                }
+                                            },
+                                            onDeleteClick = {
+                                                showDeleteDialog = file
+                                            },
+                                            onLongClick = {
+                                                if (!uiState.isSelectionMode) {
+                                                    viewModel.toggleSelectionMode()
+                                                    viewModel.toggleFileSelection(file)
+                                                }
+                                            }
+                                        )
+                                        if (index < uiState.files.lastIndex) {
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                                color = Slate700.copy(alpha = 0.3f),
+                                                thickness = 0.5.dp
+                                            )
+                                        }
+                                    }
+                                }
+                            }
                         }
-                    }
                 }
             
                     // Upload/Download Progress Overlay
@@ -555,148 +624,103 @@ private fun GlassFileListItem(
     onFileClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onLongClick: () -> Unit = {},
-    modifier: Modifier = Modifier,
-    onPreviewClick: () -> Unit = {}
+    modifier: Modifier = Modifier
 ) {
     var showMenu by remember { mutableStateOf(false) }
-    
-    Surface(
+
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onFileClick,
                 onLongClick = onLongClick
             )
-            .clip(RoundedCornerShape(12.dp))
-            .border(
-                width = 1.dp,
-                color = com.baluhost.android.presentation.ui.theme.Slate700.copy(alpha = if (isSelected) 0.7f else 0.5f),
-                shape = RoundedCornerShape(12.dp)
-            ),
-        color = if (isSelected) 
-            com.baluhost.android.presentation.ui.theme.Slate800.copy(alpha = 0.6f)
-        else 
-            com.baluhost.android.presentation.ui.theme.GlassMedium,
-        shape = RoundedCornerShape(12.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            // Checkbox in selection mode (ensure minimum touch target)
-            if (isSelectionMode) {
-                Checkbox(
-                    checked = isSelected,
-                    onCheckedChange = { onFileClick() },
-                    modifier = Modifier.size(48.dp),
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = Sky400,
-                        uncheckedColor = Slate400
-                    )
-                )
-            }
-            
-            Icon(
-                imageVector = when {
-                    file.isDirectory -> Icons.Default.Folder
-                    file.name.endsWith(".pdf") -> Icons.Default.Description
-                    file.name.endsWith(".jpg") || file.name.endsWith(".png") -> Icons.Default.Image
-                    file.name.endsWith(".mp4") || file.name.endsWith(".avi") -> Icons.Default.VideoFile
-                    else -> Icons.Default.InsertDriveFile
-                },
-                contentDescription = null,
-                modifier = Modifier.size(44.dp),
-                tint = if (file.isDirectory) Sky400 else Indigo400
+            .then(
+                if (isSelected) Modifier.background(Slate800.copy(alpha = 0.4f))
+                else Modifier
             )
-            
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = file.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = Slate100
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        // Checkbox in selection mode
+        if (isSelectionMode) {
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onFileClick() },
+                modifier = Modifier.size(40.dp),
+                colors = CheckboxDefaults.colors(
+                    checkedColor = Sky400,
+                    uncheckedColor = Slate400
                 )
-                
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    if (!file.isDirectory) {
-                        Text(
-                            text = formatFileSize(file.size),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400
-                        )
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400
-                        )
-                    }
-                    Text(
-                        text = formatDate(file.modifiedAt.epochSecond),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
-                    )
-                }
+            )
+        }
+
+        // Icon
+        Icon(
+            imageVector = when {
+                file.isDirectory && file.name.equals("Shared", ignoreCase = true) -> Icons.Default.Group
+                file.isDirectory -> Icons.Default.Folder
+                file.name.endsWith(".pdf", ignoreCase = true) -> Icons.Default.Description
+                file.name.endsWith(".jpg", ignoreCase = true) ||
+                file.name.endsWith(".jpeg", ignoreCase = true) ||
+                file.name.endsWith(".png", ignoreCase = true) -> Icons.Default.Image
+                file.name.endsWith(".mp4", ignoreCase = true) ||
+                file.name.endsWith(".avi", ignoreCase = true) ||
+                file.name.endsWith(".mov", ignoreCase = true) -> Icons.Default.VideoFile
+                else -> Icons.Default.InsertDriveFile
+            },
+            contentDescription = null,
+            modifier = Modifier.size(28.dp),
+            tint = when {
+                file.isDirectory && file.name.equals("Shared", ignoreCase = true) -> Green400
+                file.isDirectory -> Sky400
+                else -> Indigo400
             }
-            
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+        )
+
+        // Name
+        Text(
+            text = file.name,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = Slate200
+        )
+
+        // Context menu
+        Box {
+            IconButton(
+                onClick = { showMenu = true },
+                modifier = Modifier.size(36.dp)
             ) {
-                // Preview button for media files (image/video)
-                if (!file.isDirectory && (file.mimeType?.startsWith("image/") == true || file.mimeType?.startsWith("video/") == true)) {
-                    IconButton(
-                        onClick = onPreviewClick,
-                        modifier = Modifier
-                            .size(48.dp)
-                    ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Optionen",
+                    modifier = Modifier.size(18.dp),
+                    tint = Slate500
+                )
+            }
+
+            DropdownMenu(
+                expanded = showMenu,
+                onDismissRequest = { showMenu = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Löschen") },
+                    onClick = {
+                        showMenu = false
+                        onDeleteClick()
+                    },
+                    leadingIcon = {
                         Icon(
-                            imageVector = Icons.Default.Visibility,
-                            contentDescription = "Vorschau",
-                            tint = Sky400
+                            Icons.Default.Delete,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
                         )
                     }
-                }
-
-                IconButton(
-                    onClick = { showMenu = true },
-                    modifier = Modifier.size(48.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Weitere Optionen",
-                        tint = Slate400
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Löschen") },
-                        onClick = {
-                            showMenu = false
-                            onDeleteClick()
-                        },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Delete,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    )
-                }
+                )
             }
         }
     }
