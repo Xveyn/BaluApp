@@ -6,16 +6,28 @@ import com.google.gson.annotations.SerializedName
 
 data class GenerateVpnConfigRequest(
     @SerializedName("device_name")
-    val deviceName: String
+    val deviceName: String,
+    @SerializedName("server_public_endpoint")
+    val serverPublicEndpoint: String
 )
 
 data class VpnConfigResponse(
-    val client: VpnClientDto,
-    val config: String,
+    @SerializedName("client_id")
+    val clientId: Int,
+    @SerializedName("device_name")
+    val deviceName: String,
+    @SerializedName("assigned_ip")
+    val assignedIp: String,
+    @SerializedName("client_public_key")
+    val clientPublicKey: String,
+    @SerializedName("server_public_key")
+    val serverPublicKey: String,
+    @SerializedName("server_endpoint")
+    val serverEndpoint: String,
+    @SerializedName("config_content")
+    val configContent: String?,
     @SerializedName("config_base64")
-    val configBase64: String,
-    @SerializedName("qr_code")
-    val qrCode: String? = null
+    val configBase64: String?
 )
 
 data class VpnClientDto(
@@ -63,4 +75,31 @@ data class VpnStatusResponse(
     val isRunning: Boolean,
     @SerializedName("active_clients")
     val activeClients: Int
+)
+
+data class VpnAvailableTypesResponse(
+    @SerializedName("available_types")
+    val availableTypes: List<String>
+)
+
+data class FetchConfigByTypeRequest(
+    @SerializedName("vpn_type")
+    val vpnType: String,
+    @SerializedName("device_name")
+    val deviceName: String,
+    @SerializedName("server_public_endpoint")
+    val serverPublicEndpoint: String
+)
+
+data class FetchConfigByTypeResponse(
+    @SerializedName("vpn_type")
+    val vpnType: String,
+    @SerializedName("config_base64")
+    val configBase64: String,
+    @SerializedName("device_name")
+    val deviceName: String,
+    @SerializedName("client_id")
+    val clientId: Int? = null,
+    @SerializedName("assigned_ip")
+    val assignedIp: String? = null
 )

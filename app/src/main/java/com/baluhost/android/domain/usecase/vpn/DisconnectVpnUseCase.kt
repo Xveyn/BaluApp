@@ -13,15 +13,15 @@ import javax.inject.Inject
 class DisconnectVpnUseCase @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    
+
     operator fun invoke(): Result<Boolean> {
         return try {
             val intent = Intent(context, BaluHostVpnService::class.java).apply {
                 action = BaluHostVpnService.ACTION_DISCONNECT
             }
-            
+
             context.startService(intent)
-            
+
             Result.Success(true)
         } catch (e: Exception) {
             Result.Error(Exception("Failed to stop VPN: ${e.message}", e))

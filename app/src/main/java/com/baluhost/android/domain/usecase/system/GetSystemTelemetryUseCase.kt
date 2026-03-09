@@ -21,7 +21,9 @@ class GetSystemTelemetryUseCase @Inject constructor(
                 cpu = com.baluhost.android.domain.model.CpuStats(
                     usagePercent = systemInfo.cpu.usage,
                     cores = systemInfo.cpu.cores,
-                    frequencyMhz = systemInfo.cpu.frequencyMhz
+                    frequencyMhz = systemInfo.cpu.frequencyMhz,
+                    temperatureCelsius = systemInfo.cpu.temperatureCelsius,
+                    model = systemInfo.cpu.model
                 ),
                 memory = com.baluhost.android.domain.model.MemoryStats(
                     totalBytes = systemInfo.memory.total,
@@ -29,7 +31,9 @@ class GetSystemTelemetryUseCase @Inject constructor(
                     availableBytes = systemInfo.memory.free,
                     usagePercent = if (systemInfo.memory.total > 0) {
                         (systemInfo.memory.used.toDouble() / systemInfo.memory.total.toDouble()) * 100.0
-                    } else 0.0
+                    } else 0.0,
+                    speedMts = systemInfo.memory.speedMts,
+                    type = systemInfo.memory.type
                 ),
                 disk = com.baluhost.android.domain.model.DiskStats(
                     totalBytes = systemInfo.disk.total,

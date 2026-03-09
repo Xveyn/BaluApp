@@ -105,6 +105,17 @@
                 android:value="VPN Connection for secure remote NAS access" />
         </service>
         
+        <!-- Server Connection Monitoring Service -->
+        <service
+            android:name=".data.notification.ServerConnectionService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="false">
+            <meta-data
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Server connection monitoring for NAS status display" />
+        </service>
+
         <!-- Sync Notification Action Receiver -->
         <receiver
             android:name=".data.worker.SyncNotificationReceiver"
@@ -129,7 +140,7 @@
         </provider>
         -->
         
-        <!-- WorkManager Initialization -->
+        <!-- Disable default WorkManager initializer so Hilt can provide its factory -->
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="${applicationId}.androidx-startup"
@@ -137,7 +148,8 @@
             tools:node="merge">
             <meta-data
                 android:name="androidx.work.WorkManagerInitializer"
-                android:value="androidx.startup" />
+                android:value="androidx.startup"
+                tools:node="remove" />
         </provider>
 
     </application>

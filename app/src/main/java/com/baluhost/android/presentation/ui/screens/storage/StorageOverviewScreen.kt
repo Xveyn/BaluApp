@@ -21,7 +21,8 @@ fun StorageOverviewScreen(
     ) {
         Text(
             text = "Speicher-Einrichtung abgeschlossen",
-            style = MaterialTheme.typography.headlineSmall
+            style = MaterialTheme.typography.headlineSmall,
+            color = androidx.compose.ui.graphics.Color.White
         )
         Spacer(modifier = Modifier.height(24.dp))
         Button(
@@ -29,7 +30,7 @@ fun StorageOverviewScreen(
             shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = com.baluhost.android.presentation.ui.theme.Sky500,
-                contentColor = com.baluhost.android.presentation.ui.theme.Slate950
+                contentColor = androidx.compose.ui.graphics.Color.White
             )
         ) {
             Text("Weiter zu Dateien")

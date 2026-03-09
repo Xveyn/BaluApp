@@ -5,6 +5,8 @@ import com.baluhost.android.data.remote.api.SyncApi
 import com.baluhost.android.data.remote.dto.sync.*
 import com.baluhost.android.domain.model.sync.*
 import com.baluhost.android.domain.repository.SyncRepository
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.Instant
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -161,9 +163,10 @@ class SyncRepositoryImpl @Inject constructor(
         remotePath: String,
         file: okhttp3.MultipartBody.Part
     ) {
-        syncApi.uploadFile(folderId.toString(), remotePath, file)
+        val pathBody = remotePath.toRequestBody("text/plain".toMediaTypeOrNull())
+        syncApi.uploadFile(file, pathBody)
     }
-    
+
     /**
      * Initiate chunked upload.
      */
@@ -172,24 +175,25 @@ class SyncRepositoryImpl @Inject constructor(
     ): InitiateUploadResponseDto {
         return syncApi.initiateChunkedUpload(request)
     }
-    
+
     /**
      * Upload a chunk.
      */
     suspend fun uploadChunk(
-        metadata: ChunkUploadDto,
-        chunk: okhttp3.MultipartBody.Part
+        uploadId: String,
+        chunkIndex: Int,
+        chunk: okhttp3.RequestBody
     ): ChunkUploadResponseDto {
-        return syncApi.uploadChunk(metadata, chunk)
+        return syncApi.uploadChunk(uploadId, chunkIndex, chunk)
     }
-    
+
     /**
      * Finalize chunked upload.
      */
     suspend fun finalizeChunkedUpload(uploadId: String) {
         syncApi.finalizeChunkedUpload(uploadId)
     }
-    
+
     /**
      * Cancel chunked upload.
      */
@@ -201,7 +205,16 @@ class SyncRepositoryImpl @Inject constructor(
         folderId: Long,
         remotePath: String
     ): okhttp3.ResponseBody {
-        return syncApi.downloadFile(folderId.toString(), remotePath)
+        return syncApi.downloadFile(remotePath)
+    }
+
+    override suspend fun getSyncSchedules(): Result<List<SyncSchedule>> {
+        return try {
+            val response = syncApi.getSyncSchedules()
+            Result.success(response.schedules.map { it.toDomain() })
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
     }
 }
 
@@ -242,6 +255,20 @@ private fun UploadQueueDto.toDomain() = UploadQueueItem(
     retryCount = retryCount,
     createdAt = parseIsoTimestamp(createdAt),
     errorMessage = errorMessage
+)
+
+private fun SyncScheduleDto.toDomain() = SyncSchedule(
+    scheduleId = scheduleId,
+    deviceId = deviceId,
+    scheduleType = ScheduleType.fromString(scheduleType),
+    timeOfDay = timeOfDay,
+    dayOfWeek = dayOfWeek,
+    dayOfMonth = dayOfMonth,
+    nextRunAt = nextRunAt?.let { parseIsoTimestamp(it) },
+    lastRunAt = lastRunAt?.let { parseIsoTimestamp(it) },
+    enabled = enabled,
+    syncDeletions = syncDeletions,
+    resolveConflicts = resolveConflicts
 )
 
 /**

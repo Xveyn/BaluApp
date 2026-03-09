@@ -44,4 +44,14 @@ interface VpnRepository {
      * Delete/revoke VPN client.
      */
     suspend fun deleteVpnClient(clientId: Int): Result<Unit>
+
+    /**
+     * Get available VPN config types (e.g. "fritzbox", "wireguard").
+     */
+    suspend fun getAvailableVpnTypes(): Result<List<String>>
+
+    /**
+     * Fetch VPN config for a specific type.
+     */
+    suspend fun fetchVpnConfigByType(vpnType: String): Result<VpnConfig>
 }

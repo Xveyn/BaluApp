@@ -4,54 +4,35 @@ import com.google.gson.annotations.SerializedName
 
 /**
  * DTO for initiating a chunked upload.
+ * Maps to backend ChunkedInitRequest.
  */
 data class InitiateUploadDto(
-    @SerializedName("folder_id")
-    val folderId: Long,
-    @SerializedName("remote_path")
-    val remotePath: String,
-    @SerializedName("file_size")
-    val fileSize: Long,
-    @SerializedName("file_hash")
-    val fileHash: String,
-    @SerializedName("total_chunks")
-    val totalChunks: Int
+    @SerializedName("filename")
+    val filename: String,
+    @SerializedName("total_size")
+    val totalSize: Long,
+    @SerializedName("target_path")
+    val targetPath: String = ""
 )
 
 /**
  * Response from initiating a chunked upload.
+ * Maps to backend ChunkedInitResponse.
  */
 data class InitiateUploadResponseDto(
     @SerializedName("upload_id")
     val uploadId: String,
-    @SerializedName("total_chunks")
-    val totalChunks: Int,
     @SerializedName("chunk_size")
-    val chunkSize: Long
-)
-
-/**
- * DTO for uploading a chunk.
- */
-data class ChunkUploadDto(
-    @SerializedName("upload_id")
-    val uploadId: String,
-    @SerializedName("chunk_index")
-    val chunkIndex: Int,
-    @SerializedName("chunk_hash")
-    val chunkHash: String
+    val chunkSize: Int
 )
 
 /**
  * Response from uploading a chunk.
+ * Maps to backend ChunkedChunkResponse.
  */
 data class ChunkUploadResponseDto(
-    @SerializedName("upload_id")
-    val uploadId: String,
-    @SerializedName("chunk_index")
-    val chunkIndex: Int,
-    @SerializedName("received")
-    val received: Boolean
+    @SerializedName("received_bytes")
+    val receivedBytes: Int
 )
 
 /**

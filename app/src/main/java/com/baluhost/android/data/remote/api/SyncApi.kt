@@ -93,57 +93,68 @@ interface SyncApi {
     ): RemoteFileListResponseDto
     
     /**
-     * Upload a file (single request for small files).
+     * Upload a file via the files/upload endpoint.
+     * Backend accepts 'file' (single) or 'files' (list) + 'path' form field.
      */
     @Multipart
-    @POST("mobile/upload/file/{folder_id}")
+    @POST("files/upload")
     suspend fun uploadFile(
-        @Path("folder_id") folderId: String,
-        @Query("remote_path") remotePath: String,
-        @Part file: okhttp3.MultipartBody.Part
+        @Part file: okhttp3.MultipartBody.Part,
+        @Part("path") remotePath: okhttp3.RequestBody
     )
-    
+
     /**
-     * Initiate a chunked upload for large files.
+     * Initiate a chunked upload session.
+     * Backend: POST /files/upload/chunked/init
      */
-    @POST("mobile/upload/chunked/initiate")
+    @POST("files/upload/chunked/init")
     suspend fun initiateChunkedUpload(
         @Body request: InitiateUploadDto
     ): InitiateUploadResponseDto
-    
+
     /**
-     * Upload a single chunk.
+     * Upload a single chunk as raw bytes.
+     * Backend: POST /files/upload/chunked/{upload_id}/chunk?chunk_index=N
      */
-    @Multipart
-    @POST("mobile/upload/chunked/chunk")
+    @POST("files/upload/chunked/{upload_id}/chunk")
     suspend fun uploadChunk(
-        @Part("metadata") metadata: ChunkUploadDto,
-        @Part chunk: okhttp3.MultipartBody.Part
+        @Path("upload_id") uploadId: String,
+        @Query("chunk_index") chunkIndex: Int,
+        @Body chunk: okhttp3.RequestBody
     ): ChunkUploadResponseDto
-    
+
     /**
      * Finalize a chunked upload.
+     * Backend: POST /files/upload/chunked/{upload_id}/complete
      */
-    @POST("mobile/upload/chunked/{upload_id}/finalize")
+    @POST("files/upload/chunked/{upload_id}/complete")
     suspend fun finalizeChunkedUpload(
         @Path("upload_id") uploadId: String
     )
-    
+
     /**
      * Cancel a chunked upload.
+     * Backend: DELETE /files/upload/chunked/{upload_id}
      */
-    @DELETE("mobile/upload/chunked/{upload_id}/cancel")
+    @DELETE("files/upload/chunked/{upload_id}")
     suspend fun cancelChunkedUpload(
         @Path("upload_id") uploadId: String
     )
     
     /**
      * Download a file from server.
+     * Backend: GET /files/download/{resource_path}
+     * resource_path is the full path from storage root (e.g. "sven/Documents/file.txt")
      */
     @Streaming
-    @GET("mobile/download/file/{folder_id}")
+    @GET("files/download/{resource_path}")
     suspend fun downloadFile(
-        @Path("folder_id") folderId: String,
-        @Query("remote_path") remotePath: String
+        @Path("resource_path", encoded = true) resourcePath: String
     ): okhttp3.ResponseBody
+
+    /**
+     * Get sync schedules configured on the server.
+     */
+    @GET("sync/schedule/list")
+    suspend fun getSyncSchedules(): SyncScheduleListResponseDto
 }

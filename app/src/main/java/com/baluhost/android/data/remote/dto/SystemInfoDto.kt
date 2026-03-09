@@ -26,7 +26,11 @@ data class CpuStatsDto(
     @SerializedName("cores")
     val cores: Int,
     @SerializedName("frequency_mhz")
-    val frequencyMhz: Double?
+    val frequencyMhz: Double?,
+    @SerializedName("temperature_celsius")
+    val temperatureCelsius: Double? = null,
+    @SerializedName("model")
+    val model: String? = null
 )
 
 data class MemoryStatsDto(

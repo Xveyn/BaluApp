@@ -3,6 +3,8 @@ package com.baluhost.android.data.repository
 import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.VpnApi
+import android.util.Base64
+import com.baluhost.android.data.remote.dto.FetchConfigByTypeRequest
 import com.baluhost.android.data.remote.dto.GenerateVpnConfigRequest
 import com.baluhost.android.data.remote.dto.UpdateVpnClientRequest
 import com.baluhost.android.domain.model.VpnClient
@@ -24,40 +26,55 @@ class VpnRepositoryImpl @Inject constructor(
 ) : VpnRepository {
     
     override suspend fun fetchVpnConfig(): Result<VpnConfig> = try {
-        Log.d(TAG, "Fetching VPN config from backend")
-        
-        val response = vpnApi.generateConfig(GenerateVpnConfigRequest("Android Device"))
-        
-        val parsed = WireGuardConfigParser.parse(response.config)
-
-        val vpnConfig = VpnConfig(
-            clientId = response.client.id,
-            deviceName = response.client.deviceName,
-            publicKey = response.client.publicKey,
-            assignedIp = response.client.assignedIp,
-            configString = response.config,
-            configBase64 = response.configBase64,
-            serverPublicKey = parsed.serverPublicKey,
-            serverEndpoint = parsed.serverEndpoint,
-            serverPort = parsed.serverPort,
-            isActive = response.client.isActive,
-            createdAt = response.client.createdAt,
-            lastHandshake = response.client.lastHandshake
-        )
-
-        // Save to local storage
-        saveVpnConfig(vpnConfig)
-
-        Log.d(TAG, "VPN config fetched and saved successfully")
-        Result.Success(vpnConfig)
-        
-    } catch (e: Exception) {
-        Log.e(TAG, "Failed to fetch VPN config", e)
-        
-        // Try to return cached config on error
+        // Cache-first: return cached config if available
         val cachedConfig = getCachedVpnConfig()
         if (cachedConfig != null) {
             Log.d(TAG, "Returning cached VPN config")
+            Result.Success(cachedConfig)
+        } else {
+            Log.d(TAG, "No cached config, generating new VPN config from backend")
+
+            val serverUrl = preferencesManager.getServerUrl().first() ?: ""
+            val deviceName = preferencesManager.getVpnDeviceName().first() ?: "Android Device"
+            val response = vpnApi.generateConfig(
+                GenerateVpnConfigRequest(deviceName, serverUrl)
+            )
+
+            val configString = response.configContent
+            if (configString.isNullOrBlank()) {
+                Result.Error(Exception("Keine VPN-Konfiguration vom Server erhalten"))
+            } else {
+                val parsed = WireGuardConfigParser.parse(configString)
+
+                val vpnConfig = VpnConfig(
+                    clientId = response.clientId,
+                    deviceName = response.deviceName,
+                    publicKey = response.clientPublicKey,
+                    assignedIp = response.assignedIp,
+                    configString = configString,
+                    configBase64 = response.configBase64,
+                    serverPublicKey = parsed.serverPublicKey,
+                    serverEndpoint = parsed.serverEndpoint,
+                    serverPort = parsed.serverPort,
+                    isActive = true,
+                    createdAt = null,
+                    lastHandshake = null
+                )
+
+                // Save to local storage
+                saveVpnConfig(vpnConfig)
+
+                Log.d(TAG, "VPN config fetched and saved successfully")
+                Result.Success(vpnConfig)
+            }
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to fetch VPN config", e)
+
+        // Try to return cached config on error
+        val cachedConfig = getCachedVpnConfig()
+        if (cachedConfig != null) {
+            Log.d(TAG, "Returning cached VPN config after error")
             Result.Success(cachedConfig)
         } else {
             Result.Error(Exception("Failed to fetch VPN config: ${e.message}", e))
@@ -67,29 +84,36 @@ class VpnRepositoryImpl @Inject constructor(
     override suspend fun generateVpnConfig(deviceName: String): Result<VpnConfig> = try {
         Log.d(TAG, "Generating new VPN config for device: $deviceName")
         
-        val response = vpnApi.generateConfig(GenerateVpnConfigRequest(deviceName))
-        val parsed = WireGuardConfigParser.parse(response.config)
+        val serverUrl = preferencesManager.getServerUrl().first() ?: ""
+        val response = vpnApi.generateConfig(GenerateVpnConfigRequest(deviceName, serverUrl))
 
-        val vpnConfig = VpnConfig(
-            clientId = response.client.id,
-            deviceName = response.client.deviceName,
-            publicKey = response.client.publicKey,
-            assignedIp = response.client.assignedIp,
-            configString = response.config,
-            configBase64 = response.configBase64,
-            serverPublicKey = parsed.serverPublicKey,
-            serverEndpoint = parsed.serverEndpoint,
-            serverPort = parsed.serverPort,
-            isActive = response.client.isActive,
-            createdAt = response.client.createdAt,
-            lastHandshake = response.client.lastHandshake
-        )
-        
-        // Save to local storage
-        saveVpnConfig(vpnConfig)
-        
-        Log.d(TAG, "VPN config generated successfully")
-        Result.Success(vpnConfig)
+        val configString = response.configContent
+        if (configString.isNullOrBlank()) {
+            Result.Error(Exception("Keine VPN-Konfiguration vom Server erhalten"))
+        } else {
+            val parsed = WireGuardConfigParser.parse(configString)
+
+            val vpnConfig = VpnConfig(
+                clientId = response.clientId,
+                deviceName = response.deviceName,
+                publicKey = response.clientPublicKey,
+                assignedIp = response.assignedIp,
+                configString = configString,
+                configBase64 = response.configBase64,
+                serverPublicKey = parsed.serverPublicKey,
+                serverEndpoint = parsed.serverEndpoint,
+                serverPort = parsed.serverPort,
+                isActive = true,
+                createdAt = null,
+                lastHandshake = null
+            )
+
+            // Save to local storage
+            saveVpnConfig(vpnConfig)
+
+            Log.d(TAG, "VPN config generated successfully")
+            Result.Success(vpnConfig)
+        }
         
     } catch (e: Exception) {
         Log.e(TAG, "Failed to generate VPN config", e)
@@ -206,6 +230,58 @@ class VpnRepositoryImpl @Inject constructor(
         Result.Error(Exception("Failed to delete VPN client: ${e.message}", e))
     }
     
+    override suspend fun getAvailableVpnTypes(): Result<List<String>> = try {
+        Log.d(TAG, "Fetching available VPN types")
+        val response = vpnApi.getAvailableTypes()
+        Log.d(TAG, "Available VPN types: ${response.availableTypes}")
+        Result.Success(response.availableTypes)
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to fetch available VPN types", e)
+        Result.Error(Exception("Failed to fetch available VPN types: ${e.message}", e))
+    }
+
+    override suspend fun fetchVpnConfigByType(vpnType: String): Result<VpnConfig> = try {
+        Log.d(TAG, "Fetching VPN config for type: $vpnType")
+
+        val serverUrl = preferencesManager.getServerUrl().first() ?: ""
+        val deviceName = preferencesManager.getVpnDeviceName().first() ?: "Android Device"
+        val response = vpnApi.fetchConfigByType(
+            FetchConfigByTypeRequest(vpnType, deviceName, serverUrl)
+        )
+
+        // Backend returns config_base64 only — decode to get config string
+        val configString = String(Base64.decode(response.configBase64, Base64.DEFAULT))
+        if (configString.isBlank()) {
+            Result.Error(Exception("Keine VPN-Konfiguration vom Server erhalten"))
+        } else {
+            val parsed = WireGuardConfigParser.parse(configString)
+
+            val vpnConfig = VpnConfig(
+                clientId = response.clientId ?: 0,
+                deviceName = response.deviceName,
+                publicKey = parsed.serverPublicKey,
+                assignedIp = response.assignedIp ?: parsed.assignedIp,
+                configString = configString,
+                configBase64 = response.configBase64,
+                serverPublicKey = parsed.serverPublicKey,
+                serverEndpoint = parsed.serverEndpoint,
+                serverPort = parsed.serverPort,
+                isActive = true,
+                createdAt = null,
+                lastHandshake = null
+            )
+
+            saveVpnConfig(vpnConfig)
+            preferencesManager.saveVpnType(vpnType)
+
+            Log.d(TAG, "VPN config for type $vpnType fetched and saved")
+            Result.Success(vpnConfig)
+        }
+    } catch (e: Exception) {
+        Log.e(TAG, "Failed to fetch VPN config by type", e)
+        Result.Error(Exception("Failed to fetch VPN config by type: ${e.message}", e))
+    }
+
     companion object {
         private const val TAG = "VpnRepositoryImpl"
     }

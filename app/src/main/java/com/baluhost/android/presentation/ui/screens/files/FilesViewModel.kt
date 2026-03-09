@@ -345,10 +345,24 @@ class FilesViewModel @Inject constructor(
         if (pathStack.isEmpty()) {
             return false // At root, can't go back
         }
-        
+
         val previousPath = pathStack.removeLastOrNull() ?: ""
         loadFiles(previousPath)
         return true
+    }
+
+    fun navigateToPath(path: String) {
+        pathStack.clear()
+        if (path.isNotEmpty()) {
+            val segments = path.split("/")
+            var accumulated = ""
+            pathStack.add("") // root
+            for (i in 0 until segments.size - 1) {
+                accumulated = if (accumulated.isEmpty()) segments[i] else "$accumulated/${segments[i]}"
+                pathStack.add(accumulated)
+            }
+        }
+        loadFiles(path)
     }
     
     fun uploadFile(file: File, destinationPath: String? = null) {

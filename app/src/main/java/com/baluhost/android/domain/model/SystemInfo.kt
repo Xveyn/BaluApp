@@ -15,14 +15,18 @@ data class SystemInfo(
 data class CpuStats(
     val usagePercent: Double,
     val cores: Int,
-    val frequencyMhz: Double?
+    val frequencyMhz: Double?,
+    val temperatureCelsius: Double? = null,
+    val model: String? = null
 )
 
 data class MemoryStats(
     val totalBytes: Long,
     val usedBytes: Long,
     val availableBytes: Long,
-    val usagePercent: Double
+    val usagePercent: Double,
+    val speedMts: Int? = null,
+    val type: String? = null
 )
 
 data class DiskStats(
