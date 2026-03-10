@@ -46,6 +46,7 @@ class FolderSyncWorker @AssistedInject constructor(
         val startTime = System.currentTimeMillis()
 
         Log.d(TAG, "Starting sync for folder: $folderId (manual=$isManual)")
+
         serverConnectionMonitor.acquire("sync")
 
         try {
@@ -64,6 +65,7 @@ class FolderSyncWorker @AssistedInject constructor(
                 )
 
             val folderName = localFolderScanner.getFolderDisplayName(folderConfig.localUri) ?: folderId
+            Log.d(TAG, "Folder config loaded: name=$folderName, remotePath=${folderConfig.remotePath}, syncType=${folderConfig.syncType}")
 
             // 2. Check folder accessibility
             if (!localFolderScanner.isFolderAccessible(folderConfig.localUri)) {
@@ -78,6 +80,7 @@ class FolderSyncWorker @AssistedInject constructor(
 
             // 3. Scan local files
             setProgress(workDataOf(PROGRESS_STATUS to "scanning_local"))
+            Log.d(TAG, "Scanning local folder: ${folderConfig.localUri}")
 
             val scanResult = localFolderScanner.scanFolder(
                 folderUri = folderConfig.localUri,
@@ -85,13 +88,26 @@ class FolderSyncWorker @AssistedInject constructor(
                 excludePatterns = folderConfig.excludePatterns
             )
 
+            Log.d(TAG, "Scan complete: ${scanResult.totalFiles} files, ${scanResult.totalSize} bytes")
             if (scanResult.errors.isNotEmpty()) {
                 Log.w(TAG, "Scan had errors: ${scanResult.errors}")
             }
 
-            // Calculate hashes for local files
+            // 4. List remote files FIRST (before hashing, to decide if hashing is needed)
+            setProgress(workDataOf(PROGRESS_STATUS to "listing_remote"))
+            val remoteFiles = syncRepository.listRemoteFiles(folderId, folderConfig.remotePath)
+            Log.d(TAG, "Remote files: ${remoteFiles.size}")
+
+            // 5. Build local file info
+            // Only compute hashes when remote files also have hashes (files/list doesn't provide them).
+            // When hashes are unavailable, ConflictDetectionService uses size comparison instead.
+            val remoteHasHashes = remoteFiles.any { it.hash.isNotEmpty() }
             val localFilesWithHash = scanResult.fileList.map { fileInfo ->
-                val hash = localFolderScanner.calculateFileHash(fileInfo.uri) ?: ""
+                val hash = if (remoteHasHashes) {
+                    localFolderScanner.calculateFileHash(fileInfo.uri) ?: ""
+                } else {
+                    ""
+                }
                 ConflictDetectionService.LocalFileInfo(
                     relativePath = fileInfo.relativePath,
                     hash = hash,
@@ -100,14 +116,7 @@ class FolderSyncWorker @AssistedInject constructor(
                 )
             }
 
-            // 4. List remote files
-            setProgress(workDataOf(PROGRESS_STATUS to "listing_remote"))
-            val remoteFiles = syncRepository.listRemoteFiles(
-                folderId.toLongOrNull() ?: 0L,
-                folderConfig.remotePath
-            )
-
-            // 5. Detect conflicts
+            // 6. Detect conflicts
             setProgress(workDataOf(PROGRESS_STATUS to "detecting_conflicts"))
             val analysisResult = conflictDetectionService.analyzeConflicts(
                 localFiles = localFilesWithHash,
@@ -117,7 +126,11 @@ class FolderSyncWorker @AssistedInject constructor(
 
             Log.d(TAG, "Conflict analysis: uploads=${analysisResult.summary.uploadsNeeded}, " +
                     "downloads=${analysisResult.summary.downloadsNeeded}, " +
-                    "conflicts=${analysisResult.summary.conflictsFound}")
+                    "conflicts=${analysisResult.summary.conflictsFound}, " +
+                    "noAction=${analysisResult.summary.noActionNeeded}")
+            // Log first few actions for debugging
+            (analysisResult.toUpload.take(3) + analysisResult.toDownload.take(3) + analysisResult.noAction.take(3))
+                .forEach { Log.d(TAG, "  ${it.action}: ${it.relativePath} - ${it.reason}") }
 
             // 6. Handle conflicts based on resolution strategy
             val pendingConflicts = mutableListOf<FileConflict>()
@@ -231,7 +244,7 @@ class FolderSyncWorker @AssistedInject constructor(
                                     }
                                 }
                                 syncRepository.uploadFile(
-                                    folderId.toLongOrNull() ?: 0L,
+                                    folderId,
                                     fullRemotePath,
                                     part
                                 )
@@ -274,7 +287,7 @@ class FolderSyncWorker @AssistedInject constructor(
                             }
                         }
                         val responseBody = syncRepository.downloadFile(
-                            folderId.toLongOrNull() ?: 0L,
+                            folderId,
                             fullDownloadPath
                         )
 
@@ -326,7 +339,7 @@ class FolderSyncWorker @AssistedInject constructor(
 
             val syncHistory = SyncHistory(
                 id = UUID.randomUUID().toString(),
-                folderId = folderId.toLongOrNull() ?: 0L,
+                folderId = folderId,
                 folderName = folderName,
                 timestamp = System.currentTimeMillis(),
                 status = historyStatus,
@@ -368,6 +381,10 @@ class FolderSyncWorker @AssistedInject constructor(
                 ))
             }
 
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            // Worker was cancelled - don't retry, just fail
+            Log.w(TAG, "Sync was cancelled for folder: $folderId")
+            Result.failure(workDataOf("error" to "Sync cancelled"))
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed unexpectedly", e)
             val duration = System.currentTimeMillis() - startTime
@@ -383,7 +400,7 @@ class FolderSyncWorker @AssistedInject constructor(
                 preferencesManager.saveSyncHistory(
                     SyncHistory(
                         id = UUID.randomUUID().toString(),
-                        folderId = folderId.toLongOrNull() ?: 0L,
+                        folderId = folderId,
                         folderName = folderId,
                         timestamp = System.currentTimeMillis(),
                         status = SyncHistoryStatus.FAILED,
@@ -401,7 +418,7 @@ class FolderSyncWorker @AssistedInject constructor(
                 Log.e(TAG, "Failed to save sync history", historyError)
             }
 
-            Result.retry()
+            Result.failure(workDataOf("error" to (e.message ?: "Unknown error")))
         } finally {
             serverConnectionMonitor.release("sync")
         }
@@ -429,6 +446,7 @@ class FolderSyncWorker @AssistedInject constructor(
             return OneTimeWorkRequestBuilder<FolderSyncWorker>()
                 .setInputData(inputData)
                 .addTag(TAG_SYNC)
+                .addTag("folder:$folderId")
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -446,6 +464,7 @@ class FolderSyncWorker @AssistedInject constructor(
             )
                 .setInputData(inputData)
                 .addTag(TAG_SYNC)
+                .addTag("folder:$folderId")
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiredNetworkType(NetworkType.CONNECTED)

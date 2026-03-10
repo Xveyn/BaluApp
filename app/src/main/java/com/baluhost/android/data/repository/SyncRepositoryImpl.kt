@@ -1,6 +1,8 @@
 package com.baluhost.android.data.repository
 
 import android.net.Uri
+import android.util.Log
+import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.remote.api.SyncApi
 import com.baluhost.android.data.remote.dto.sync.*
 import com.baluhost.android.domain.model.sync.*
@@ -17,7 +19,8 @@ import javax.inject.Inject
  * Handles API calls and DTO to domain model mapping for folder synchronization.
  */
 class SyncRepositoryImpl @Inject constructor(
-    private val syncApi: SyncApi
+    private val syncApi: SyncApi,
+    private val filesApi: FilesApi
 ) : SyncRepository {
     
     override suspend fun getSyncFolders(deviceId: String): Result<List<SyncFolderConfig>> {
@@ -149,17 +152,52 @@ class SyncRepositoryImpl @Inject constructor(
         }
     }
     
-    override suspend fun listRemoteFiles(folderId: Long, remotePath: String): List<RemoteFileInfo> {
+    override suspend fun listRemoteFiles(folderId: String, remotePath: String): List<RemoteFileInfo> {
         return try {
-            val response = syncApi.listRemoteFiles(folderId.toString(), remotePath)
-            response.files.map { it.toDomain() }
+            val allFiles = mutableListOf<RemoteFileInfo>()
+            val basePath = remotePath.trimEnd('/')
+            listFilesRecursive(basePath, basePath, allFiles)
+            Log.d("SyncRepositoryImpl", "listRemoteFiles: found ${allFiles.size} files in $remotePath")
+            allFiles
         } catch (e: Exception) {
+            Log.e("SyncRepositoryImpl", "listRemoteFiles failed for $remotePath", e)
             emptyList()
         }
     }
-    
+
+    /**
+     * Recursively list all files under a path using the files/list endpoint.
+     * Converts absolute paths to relative paths for conflict detection.
+     */
+    private suspend fun listFilesRecursive(
+        currentPath: String,
+        basePath: String,
+        result: MutableList<RemoteFileInfo>
+    ) {
+        val response = filesApi.listFiles(currentPath)
+        for (item in response.files) {
+            if (item.isDirectory) {
+                listFilesRecursive(item.path, basePath, result)
+            } else {
+                // Convert absolute path to relative path from basePath
+                val relativePath = item.path
+                    .removePrefix(basePath)
+                    .removePrefix("/")
+                result.add(
+                    RemoteFileInfo(
+                        relativePath = relativePath,
+                        name = item.name,
+                        size = item.size,
+                        hash = "", // files/list doesn't provide hashes
+                        modifiedAt = parseIsoTimestamp(item.modifiedAt)
+                    )
+                )
+            }
+        }
+    }
+
     override suspend fun uploadFile(
-        folderId: Long,
+        folderId: String,
         remotePath: String,
         file: okhttp3.MultipartBody.Part
     ) {
@@ -202,7 +240,7 @@ class SyncRepositoryImpl @Inject constructor(
     }
     
     override suspend fun downloadFile(
-        folderId: Long,
+        folderId: String,
         remotePath: String
     ): okhttp3.ResponseBody {
         return syncApi.downloadFile(remotePath)

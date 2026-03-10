@@ -167,8 +167,10 @@ class ConflictDetectionService @Inject constructor() {
         remote: RemoteFileInfo,
         lastSyncTime: Long?
     ): ConflictCheckResult {
-        // If hashes match, no action needed
-        if (local.hash == remote.hash) {
+        val bothHashesPresent = local.hash.isNotEmpty() && remote.hash.isNotEmpty()
+
+        // If both hashes are present and match, no action needed
+        if (bothHashesPresent && local.hash == remote.hash) {
             return ConflictCheckResult(
                 relativePath = local.relativePath,
                 action = SyncAction.NO_ACTION,
@@ -177,7 +179,19 @@ class ConflictDetectionService @Inject constructor() {
                 reason = "Files are identical (hash match)"
             )
         }
-        
+
+        // If one or both hashes are missing, use size as a proxy for identity.
+        // Same size = likely identical (especially for first sync / initial comparison).
+        if (!bothHashesPresent && local.size == remote.size) {
+            return ConflictCheckResult(
+                relativePath = local.relativePath,
+                action = SyncAction.NO_ACTION,
+                localInfo = local,
+                remoteInfo = remote,
+                reason = "Files likely identical (same size, hash unavailable)"
+            )
+        }
+
         // If no last sync time, use timestamp comparison
         if (lastSyncTime == null) {
             return if (local.modifiedAt > remote.modifiedAt) {

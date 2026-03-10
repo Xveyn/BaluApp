@@ -5,7 +5,7 @@ package com.baluhost.android.domain.model.sync
  */
 data class SyncHistory(
     val id: String,
-    val folderId: Long,
+    val folderId: String,
     val folderName: String,
     val timestamp: Long,
     val status: SyncHistoryStatus,
