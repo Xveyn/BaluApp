@@ -21,11 +21,14 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
+import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.local.security.AppLockManager
+import com.baluhost.android.data.notification.ServerConnectionService
 import com.baluhost.android.presentation.navigation.NavGraph
 import com.baluhost.android.presentation.navigation.Screen
 import com.baluhost.android.presentation.ui.theme.BaluHostTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,11 +41,23 @@ class MainActivity : AppCompatActivity() {
     
     @Inject
     lateinit var appLockManager: AppLockManager
-    
+
+    @Inject
+    lateinit var preferencesManager: PreferencesManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Initialize app logger
         com.baluhost.android.util.Logger.init(applicationContext)
+
+        // Start foreground notification service if user is logged in
+        lifecycleScope.launch {
+            val serverUrl = preferencesManager.getServerUrl().first()
+            if (serverUrl != null) {
+                Log.d(TAG, "User is connected, starting ServerConnectionService")
+                ServerConnectionService.start(this@MainActivity)
+            }
+        }
 
         setContent {
             BaluHostTheme {

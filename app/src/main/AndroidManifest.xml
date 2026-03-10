@@ -118,7 +118,7 @@
 
         <!-- Sync Notification Action Receiver -->
         <receiver
-            android:name=".data.worker.SyncNotificationReceiver"
+            android:name=".data.notification.SyncNotificationReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="com.baluhost.android.ACTION_CANCEL_SYNC" />
