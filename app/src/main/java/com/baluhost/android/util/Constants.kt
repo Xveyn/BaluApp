@@ -16,11 +16,11 @@ object Constants {
     
     // VPN
     const val VPN_MTU = 1280
-    const val VPN_NOTIFICATION_ID = 1001
+    const val VPN_NOTIFICATION_ID = 2001
     const val VPN_NOTIFICATION_CHANNEL = "vpn_service_channel"
-    
+
     // Camera Backup
-    const val BACKUP_NOTIFICATION_ID = 1002
+    const val BACKUP_NOTIFICATION_ID = 2002
     const val BACKUP_NOTIFICATION_CHANNEL = "backup_service_channel"
     const val BACKUP_WORK_NAME = "camera_backup"
     const val BACKUP_INTERVAL_HOURS = 6L
