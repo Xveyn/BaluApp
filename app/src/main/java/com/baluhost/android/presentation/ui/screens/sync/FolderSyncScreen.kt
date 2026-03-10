@@ -46,6 +46,9 @@ fun FolderSyncScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val pendingConflicts by viewModel.pendingConflicts.collectAsState()
+    val nasState by viewModel.nasState.collectAsState()
+    val userInfo by viewModel.userInfo.collectAsState()
+    val syncProgress by viewModel.syncProgress.collectAsState()
     val context = LocalContext.current
     
     var showFolderPicker by remember { mutableStateOf(false) }
@@ -152,6 +155,7 @@ fun FolderSyncScreen(
                         SyncContent(
                             folders = state.folders,
                             uploadQueue = state.uploadQueue,
+                            syncProgress = syncProgress,
                             onFolderClick = { folder ->
                                 selectedFolder = folder
                                 showConfigDialog = true
@@ -367,10 +371,15 @@ fun FolderSyncScreen(
         AddSyncFolderDialog(
             localFolderUri = selectedFolderUri,
             localFolderName = selectedFolderName,
+            nasState = nasState,
+            username = userInfo.username,
+            isAdmin = userInfo.isAdmin,
+            onBrowseNas = { path -> viewModel.browseNasFolder(path) },
             onDismiss = {
                 showConfigDialog = false
                 selectedFolderUri = null
                 selectedFolderName = null
+                viewModel.resetNasBrowseState()
             },
             onConfirm = { localPath, remotePath, syncType, conflictResolution, autoSync ->
                 viewModel.createFolder(
@@ -389,6 +398,7 @@ fun FolderSyncScreen(
                 showConfigDialog = false
                 selectedFolderUri = null
                 selectedFolderName = null
+                viewModel.resetNasBrowseState()
             }
         )
     }
@@ -443,6 +453,7 @@ fun FolderSyncScreen(
 private fun SyncContent(
     folders: List<SyncFolderConfig>,
     uploadQueue: List<UploadQueueItem>,
+    syncProgress: Map<String, SyncProgressInfo>,
     onFolderClick: (SyncFolderConfig) -> Unit,
     onDeleteFolder: (String) -> Unit,
     onTriggerSync: (String) -> Unit,
@@ -477,6 +488,7 @@ private fun SyncContent(
             items(folders, key = { it.id }) { folder ->
                 SyncFolderCard(
                     folder = folder,
+                    progress = syncProgress[folder.id],
                     onClick = { onFolderClick(folder) },
                     onDelete = { onDeleteFolder(folder.id) },
                     onSync = { onTriggerSync(folder.id) }
@@ -699,6 +711,7 @@ private fun EmptySyncState() {
 @Composable
 private fun SyncFolderCard(
     folder: SyncFolderConfig,
+    progress: SyncProgressInfo?,
     onClick: () -> Unit,
     onDelete: () -> Unit,
     onSync: () -> Unit
@@ -742,7 +755,11 @@ private fun SyncFolderCard(
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = folder.syncType.name.replace("_", " "),
+                    text = when (folder.syncType) {
+                        SyncType.UPLOAD_ONLY -> "Nur hochladen"
+                        SyncType.DOWNLOAD_ONLY -> "Nur herunterladen"
+                        SyncType.BIDIRECTIONAL -> "Bidirektional"
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate300
                 )
@@ -763,7 +780,8 @@ private fun SyncFolderCard(
             )
         }
         
-        if (folder.syncStatus == SyncStatus.SYNCING && folder.totalFiles > 0) {
+        // Real-time progress from WorkManager
+        if (progress != null) {
             Spacer(modifier = Modifier.height(12.dp))
             Column {
                 Row(
@@ -771,23 +789,42 @@ private fun SyncFolderCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = "Fortschritt",
+                        text = progress.statusText,
                         style = MaterialTheme.typography.bodySmall,
                         color = Slate300
                     )
+                    if (progress.total > 0) {
+                        Text(
+                            text = "${progress.current}/${progress.total}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate300
+                        )
+                    }
+                }
+                progress.currentFile?.let { file ->
                     Text(
-                        text = "${folder.syncedFiles}/${folder.totalFiles}",
+                        text = file,
                         style = MaterialTheme.typography.bodySmall,
-                        color = Slate300
+                        color = Slate400,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = { folder.syncProgress },
-                    modifier = Modifier.fillMaxWidth(),
-                    color = Sky400,
-                    trackColor = Slate700
-                )
+                if (progress.total > 0) {
+                    LinearProgressIndicator(
+                        progress = { progress.progress },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Sky400,
+                        trackColor = Slate700
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = Sky400,
+                        trackColor = Slate700
+                    )
+                }
             }
         }
         
