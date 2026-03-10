@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.worker.FolderSyncWorker
 import com.baluhost.android.domain.model.sync.*
 import com.baluhost.android.domain.repository.SyncRepository
@@ -21,7 +22,8 @@ import javax.inject.Inject
 class FolderSyncViewModel @Inject constructor(
     private val syncRepository: SyncRepository,
     private val preferencesManager: PreferencesManager,
-    private val workManager: WorkManager
+    private val workManager: WorkManager,
+    private val filesApi: FilesApi
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<FolderSyncState>(FolderSyncState.Loading)
@@ -33,9 +35,26 @@ class FolderSyncViewModel @Inject constructor(
     // Pending conflicts that need manual resolution
     private val _pendingConflicts = MutableStateFlow<List<FileConflict>>(emptyList())
     val pendingConflicts: StateFlow<List<FileConflict>> = _pendingConflicts.asStateFlow()
-    
+
+    // NAS folder browsing state
+    private val _nasState = MutableStateFlow(NasBrowseState())
+    val nasState: StateFlow<NasBrowseState> = _nasState.asStateFlow()
+
+    // User info for path defaults
+    private val _userInfo = MutableStateFlow(UserInfo())
+    val userInfo: StateFlow<UserInfo> = _userInfo.asStateFlow()
+
+    // Real-time sync progress from WorkManager, keyed by folderId
+    private val _syncProgress = MutableStateFlow<Map<String, SyncProgressInfo>>(emptyMap())
+    val syncProgress: StateFlow<Map<String, SyncProgressInfo>> = _syncProgress.asStateFlow()
+
     init {
+        loadUserInfo()
+        // Cancel any stale/stuck sync workers, then prune completed entries
+        workManager.cancelAllWorkByTag(FolderSyncWorker.TAG_SYNC)
+        workManager.pruneWork()
         loadSyncFolders()
+        observeAllSyncWorkers()
     }
     
     fun loadSyncFolders() {
@@ -102,6 +121,86 @@ class FolderSyncViewModel @Inject constructor(
             } catch (_: Exception) {
                 // Silently fail on refresh - keep existing data visible
             }
+        }
+    }
+
+    fun browseNasFolder(path: String = "") {
+        viewModelScope.launch {
+            _nasState.value = _nasState.value.copy(isLoading = true, error = null)
+            try {
+                val response = filesApi.listFiles(path)
+                val folders = response.files
+                    .filter { it.isDirectory }
+                    .map { NasFolder(it.name, it.path) }
+                _nasState.value = NasBrowseState(
+                    currentPath = path,
+                    folders = folders,
+                    isLoading = false
+                )
+            } catch (e: Exception) {
+                _nasState.value = _nasState.value.copy(
+                    isLoading = false,
+                    error = "NAS nicht erreichbar: ${e.message}"
+                )
+            }
+        }
+    }
+
+    fun resetNasBrowseState() {
+        _nasState.value = NasBrowseState()
+    }
+
+    /**
+     * Observe all sync workers tagged with TAG_SYNC and map their progress
+     * back to folder cards in real-time.
+     */
+    private fun observeAllSyncWorkers() {
+        viewModelScope.launch {
+            workManager.getWorkInfosByTagFlow(FolderSyncWorker.TAG_SYNC)
+                .collect { workInfos ->
+                    val progressMap = mutableMapOf<String, SyncProgressInfo>()
+                    var anyFinished = false
+
+                    for (info in workInfos) {
+                        val folderId = when (info.state) {
+                            WorkInfo.State.RUNNING -> info.progress.getString(FolderSyncWorker.INPUT_FOLDER_ID)
+                                ?: info.tags.firstOrNull { it.startsWith("folder:") }?.removePrefix("folder:")
+                            WorkInfo.State.SUCCEEDED, WorkInfo.State.FAILED -> {
+                                anyFinished = true
+                                null
+                            }
+                            else -> null
+                        } ?: continue
+
+                        val progress = info.progress
+                        val status = progress.getString(FolderSyncWorker.PROGRESS_STATUS) ?: "running"
+                        val fileName = progress.getString(FolderSyncWorker.PROGRESS_FILE)
+                        val current = progress.getInt(FolderSyncWorker.PROGRESS_CURRENT, 0)
+                        val total = progress.getInt(FolderSyncWorker.PROGRESS_TOTAL, 0)
+
+                        progressMap[folderId] = SyncProgressInfo(
+                            status = status,
+                            currentFile = fileName,
+                            current = current,
+                            total = total
+                        )
+                    }
+
+                    _syncProgress.value = progressMap
+
+                    // Refresh folder list when a worker finishes
+                    if (anyFinished) {
+                        refreshSyncFolders()
+                    }
+                }
+        }
+    }
+
+    private fun loadUserInfo() {
+        viewModelScope.launch {
+            val username = preferencesManager.getUsername().first() ?: ""
+            val role = preferencesManager.getUserRole().first() ?: "user"
+            _userInfo.value = UserInfo(username = username, isAdmin = role == "admin")
         }
     }
 
@@ -206,28 +305,25 @@ class FolderSyncViewModel @Inject constructor(
     fun triggerSync(folderId: String) {
         viewModelScope.launch {
             try {
-                // Enqueue WorkManager job for background sync
+                // Enqueue unique WorkManager job - APPEND_OR_REPLACE avoids both
+                // duplicate workers and stale entries blocking new work
                 val workRequest = FolderSyncWorker.createOneTimeRequest(
                     folderId = folderId,
                     isManual = true
                 )
 
-                workManager.enqueue(workRequest)
+                workManager.enqueueUniqueWork(
+                    "sync_manual_$folderId",
+                    androidx.work.ExistingWorkPolicy.REPLACE,
+                    workRequest
+                )
 
-                // Schedule periodic sync if auto-sync is enabled
-                val state = _uiState.value
-                if (state is FolderSyncState.Success) {
-                    val folder = state.folders.find { it.id == folderId }
-                    if (folder?.autoSync == true) {
-                        schedulePeriodicSync(folderId)
-                    }
-                }
-                
+                android.util.Log.d("FolderSyncViewModel", "triggerSync enqueued for $folderId")
                 _snackbarMessage.emit("Sync wird im Hintergrund ausgeführt")
-                
+
                 // Observe work status
                 observeWorkProgress(workRequest.id)
-                
+
             } catch (e: Exception) {
                 _snackbarMessage.emit("Fehler beim Starten der Synchronisation: ${e.message}")
             }
@@ -426,6 +522,44 @@ data class SyncFolderUpdateConfig(
 )
 
 data class Credentials(val username: String?, val password: String?)
+
+data class NasBrowseState(
+    val currentPath: String = "",
+    val folders: List<NasFolder> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null
+)
+
+data class NasFolder(
+    val name: String,
+    val path: String
+)
+
+data class UserInfo(
+    val username: String = "",
+    val isAdmin: Boolean = false
+)
+
+data class SyncProgressInfo(
+    val status: String,
+    val currentFile: String?,
+    val current: Int,
+    val total: Int
+) {
+    val progress: Float
+        get() = if (total > 0) current.toFloat() / total else 0f
+
+    val statusText: String
+        get() = when (status) {
+            "scanning_local" -> "Dateien scannen..."
+            "listing_remote" -> "Remote-Dateien abrufen..."
+            "detecting_conflicts" -> "Konflikte prüfen..."
+            "loading_config" -> "Konfiguration laden..."
+            "uploading" -> if (total > 0) "Hochladen ($current/$total)" else "Hochladen..."
+            "downloading" -> if (total > 0) "Herunterladen ($current/$total)" else "Herunterladen..."
+            else -> "Sync läuft..."
+        }
+}
 
 // Helper to load stored adapter credentials for a folder
 suspend fun PreferencesManager.loadStoredCredentialsFor(folderId: String): Credentials? {
