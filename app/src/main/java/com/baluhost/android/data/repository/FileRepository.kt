@@ -36,17 +36,21 @@ class FileRepository @Inject constructor(
     fun getFiles(path: String, forceRefresh: Boolean = false): Flow<List<FileItem>> {
         return fileDao.getFilesByPath(path).map { entities ->
             // Check if cache is stale
-            val isStale = entities.isEmpty() || 
-                entities.any { 
+            val isStale = entities.isEmpty() ||
+                entities.any {
                     Instant.now().minusSeconds(CACHE_VALIDITY_SECONDS).isAfter(it.cachedAt)
                 }
-            
+
             // Refresh if stale or forced
             if (isStale || forceRefresh) {
-                refreshFiles(path)
+                val result = refreshFiles(path)
+                // Return fresh data directly when available (fixes empty folder on first visit)
+                if (result is Result.Success) {
+                    return@map result.data
+                }
             }
-            
-            // Return cached data (will be updated when refresh completes)
+
+            // Return cached data
             entities.map { it.toDomain() }
         }
     }

@@ -42,6 +42,7 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
+            .setMinimumLoggingLevel(android.util.Log.DEBUG)
             .build()
     
     override fun newImageLoader(): ImageLoader {
