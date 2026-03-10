@@ -1,31 +1,28 @@
 package com.baluhost.android.util
 
 import android.content.Context
+import android.database.Cursor
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.documentfile.provider.DocumentFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 
 /**
  * Utility for scanning local folders using Storage Access Framework.
- * Used for folder synchronization to detect files and calculate sizes.
+ * Uses fast ContentResolver queries instead of slow DocumentFile.listFiles().
  */
 class LocalFolderScanner(private val context: Context) {
-    
-    /**
-     * Scan result containing folder statistics.
-     */
+
     data class ScanResult(
         val totalFiles: Int,
         val totalSize: Long,
         val fileList: List<FileInfo>,
         val errors: List<String>
     )
-    
-    /**
-     * File information from scan.
-     */
+
     data class FileInfo(
         val uri: Uri,
         val name: String,
@@ -34,46 +31,39 @@ class LocalFolderScanner(private val context: Context) {
         val mimeType: String?,
         val isDirectory: Boolean,
         val relativePath: String,
-        val hash: String = ""  // SHA256 hash for change detection
+        val hash: String = ""
     )
-    
+
     /**
-     * Scan a folder URI and return statistics.
-     * 
-     * @param folderUri The content URI from DocumentsContract.EXTRA_INITIAL_URI
-     * @param recursive Whether to scan subdirectories
-     * @param excludePatterns List of patterns to exclude (e.g., ".tmp", ".cache")
-     * @return ScanResult with file count, size, and file list
+     * Scan a folder URI using fast ContentResolver queries.
      */
     suspend fun scanFolder(
         folderUri: Uri,
         recursive: Boolean = true,
         excludePatterns: List<String> = emptyList()
     ): ScanResult = withContext(Dispatchers.IO) {
-        val documentFile = DocumentFile.fromTreeUri(context, folderUri)
-            ?: return@withContext ScanResult(0, 0, emptyList(), listOf("Invalid folder URI"))
-        
-        if (!documentFile.exists() || !documentFile.isDirectory) {
-            return@withContext ScanResult(
-                0, 0, emptyList(),
-                listOf("Folder does not exist or is not a directory")
-            )
-        }
-        
+        val treeDocId = DocumentsContract.getTreeDocumentId(folderUri)
         val files = mutableListOf<FileInfo>()
         val errors = mutableListOf<String>()
         var totalSize = 0L
-        
-        scanDirectoryRecursive(
-            documentFile = documentFile,
-            basePath = "",
-            files = files,
-            errors = errors,
-            totalSize = { totalSize += it },
-            recursive = recursive,
-            excludePatterns = excludePatterns
-        )
-        
+
+        try {
+            scanFast(
+                treeUri = folderUri,
+                parentDocId = treeDocId,
+                basePath = "",
+                files = files,
+                errors = errors,
+                recursive = recursive,
+                excludePatterns = excludePatterns
+            )
+            totalSize = files.sumOf { it.size }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            errors.add("Scan error: ${e.message}")
+        }
+
         ScanResult(
             totalFiles = files.size,
             totalSize = totalSize,
@@ -81,69 +71,88 @@ class LocalFolderScanner(private val context: Context) {
             errors = errors
         )
     }
-    
+
     /**
-     * Recursively scan a directory.
+     * Fast recursive scan using ContentResolver.query() directly.
+     * Orders of magnitude faster than DocumentFile.listFiles().
      */
-    private fun scanDirectoryRecursive(
-        documentFile: DocumentFile,
+    private suspend fun scanFast(
+        treeUri: Uri,
+        parentDocId: String,
         basePath: String,
         files: MutableList<FileInfo>,
         errors: MutableList<String>,
-        totalSize: (Long) -> Unit,
         recursive: Boolean,
         excludePatterns: List<String>
     ) {
+        coroutineContext.ensureActive()
+
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+            DocumentsContract.Document.COLUMN_MIME_TYPE
+        )
+
+        var cursor: Cursor? = null
         try {
-            val children = documentFile.listFiles()
-            
-            for (child in children) {
-                val childName = child.name ?: continue
-                
-                // Skip system/hidden files
-                if (childName.startsWith(".")) continue
-                
+            cursor = context.contentResolver.query(childrenUri, projection, null, null, null)
+            cursor ?: return
+
+            val idIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val sizeIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_SIZE)
+            val modIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            val mimeIdx = cursor.getColumnIndexOrThrow(DocumentsContract.Document.COLUMN_MIME_TYPE)
+
+            while (cursor.moveToNext()) {
+                coroutineContext.ensureActive()
+
+                val docId = cursor.getString(idIdx) ?: continue
+                val name = cursor.getString(nameIdx) ?: continue
+                val size = cursor.getLong(sizeIdx)
+                val lastModified = cursor.getLong(modIdx)
+                val mimeType = cursor.getString(mimeIdx)
+                val isDir = mimeType == DocumentsContract.Document.MIME_TYPE_DIR
+
+                // Skip hidden files
+                if (name.startsWith(".")) continue
+
                 // Check exclude patterns
-                if (excludePatterns.any { pattern ->
-                    childName.contains(pattern, ignoreCase = true)
-                }) continue
-                
-                val relativePath = if (basePath.isEmpty()) childName else "$basePath/$childName"
-                
-                if (child.isDirectory) {
+                if (excludePatterns.any { name.contains(it, ignoreCase = true) }) continue
+
+                val relativePath = if (basePath.isEmpty()) name else "$basePath/$name"
+
+                if (isDir) {
                     if (recursive) {
-                        scanDirectoryRecursive(
-                            documentFile = child,
-                            basePath = relativePath,
-                            files = files,
-                            errors = errors,
-                            totalSize = totalSize,
-                            recursive = true,
-                            excludePatterns = excludePatterns
-                        )
+                        scanFast(treeUri, docId, relativePath, files, errors, true, excludePatterns)
                     }
-                } else if (child.isFile) {
-                    val size = child.length()
-                    totalSize(size)
-                    
+                } else {
+                    val fileUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
                     files.add(
                         FileInfo(
-                            uri = child.uri,
-                            name = childName,
+                            uri = fileUri,
+                            name = name,
                             size = size,
-                            lastModified = child.lastModified(),
-                            mimeType = child.type,
+                            lastModified = lastModified,
+                            mimeType = mimeType,
                             isDirectory = false,
                             relativePath = relativePath
                         )
                     )
                 }
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
-            errors.add("Error scanning ${documentFile.name}: ${e.message}")
+            errors.add("Error scanning $basePath: ${e.message}")
+        } finally {
+            cursor?.close()
         }
     }
-    
+
     /**
      * Calculate SHA256 hash of a file for change detection.
      */
@@ -153,39 +162,32 @@ class LocalFolderScanner(private val context: Context) {
                 val digest = java.security.MessageDigest.getInstance("SHA-256")
                 val buffer = ByteArray(8192)
                 var bytesRead: Int
-                
+
                 while (input.read(buffer).also { bytesRead = it } != -1) {
                     digest.update(buffer, 0, bytesRead)
                 }
-                
+
                 digest.digest().joinToString("") { "%02x".format(it) }
             }
         } catch (e: Exception) {
             null
         }
     }
-    
-    /**
-     * Calculate SHA256 hash of a file (from File object).
-     */
+
     fun calculateFileHash(file: java.io.File): String {
         val digest = java.security.MessageDigest.getInstance("SHA-256")
         file.inputStream().use { input ->
             val buffer = ByteArray(8192)
             var bytesRead: Int
-            
+
             while (input.read(buffer).also { bytesRead = it } != -1) {
                 digest.update(buffer, 0, bytesRead)
             }
         }
-        
+
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
-    
-    /**
-     * Check if folder URI is still accessible.
-     */
     fun isFolderAccessible(folderUri: Uri): Boolean {
         return try {
             val documentFile = DocumentFile.fromTreeUri(context, folderUri)
@@ -194,10 +196,7 @@ class LocalFolderScanner(private val context: Context) {
             false
         }
     }
-    
-    /**
-     * Get folder display name.
-     */
+
     fun getFolderDisplayName(folderUri: Uri): String? {
         return try {
             val documentFile = DocumentFile.fromTreeUri(context, folderUri)
@@ -206,20 +205,17 @@ class LocalFolderScanner(private val context: Context) {
             null
         }
     }
-    
-    /**
-     * Format bytes to human-readable string.
-     */
+
     fun formatBytes(bytes: Long): String {
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         var size = bytes.toDouble()
         var unitIndex = 0
-        
+
         while (size >= 1024 && unitIndex < units.size - 1) {
             size /= 1024
             unitIndex++
         }
-        
+
         return "%.1f %s".format(size, units[unitIndex])
     }
 }

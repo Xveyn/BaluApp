@@ -384,11 +384,13 @@ fun FilesScreen(
                                             isSelectionMode = uiState.isSelectionMode,
                                             isSelected = file in uiState.selectedFiles,
                                             onFileClick = {
+                                                android.util.Log.d("FilesScreen", "File clicked: ${file.name}, isDirectory=${file.isDirectory}, selectionMode=${uiState.isSelectionMode}")
                                                 if (uiState.isSelectionMode) {
                                                     viewModel.toggleFileSelection(file)
                                                 } else {
                                                     when {
                                                         file.isDirectory -> {
+                                                            android.util.Log.d("FilesScreen", "Navigating to folder: ${file.name}")
                                                             viewModel.navigateToFolder(file.name)
                                                         }
                                                         file.mimeType?.startsWith("image/") == true ||
