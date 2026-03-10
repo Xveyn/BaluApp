@@ -79,17 +79,17 @@ interface SyncRepository {
     /**
      * List remote files in a sync folder.
      */
-    suspend fun listRemoteFiles(folderId: Long, remotePath: String): List<RemoteFileInfo>
+    suspend fun listRemoteFiles(folderId: String, remotePath: String): List<RemoteFileInfo>
 
     /**
      * Upload a file to a sync folder.
      */
-    suspend fun uploadFile(folderId: Long, remotePath: String, file: okhttp3.MultipartBody.Part)
+    suspend fun uploadFile(folderId: String, remotePath: String, file: okhttp3.MultipartBody.Part)
 
     /**
      * Download a file from a sync folder.
      */
-    suspend fun downloadFile(folderId: Long, remotePath: String): okhttp3.ResponseBody
+    suspend fun downloadFile(folderId: String, remotePath: String): okhttp3.ResponseBody
 
     /**
      * Get sync schedules from server.

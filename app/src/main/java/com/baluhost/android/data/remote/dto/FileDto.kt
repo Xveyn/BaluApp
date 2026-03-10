@@ -13,15 +13,17 @@ data class FileItemDto(
     val name: String,
     val path: String,
     val size: Long,
-    @SerializedName("is_directory")
-    val isDirectory: Boolean,
+    val type: String? = null,
     @SerializedName("modified_at")
     val modifiedAt: String,
+    @SerializedName("owner_id")
     val owner: String? = null,
     val permissions: String? = null,
     @SerializedName("mime_type")
     val mimeType: String? = null
-)
+) {
+    val isDirectory: Boolean get() = type == "directory"
+}
 
 data class UploadFileResponse(
     val message: String,

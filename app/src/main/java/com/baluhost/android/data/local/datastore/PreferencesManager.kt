@@ -257,7 +257,7 @@ class PreferencesManager @Inject constructor(
                     if (parts.size >= 10) {
                         com.baluhost.android.domain.model.sync.SyncHistory(
                             id = parts[0],
-                            folderId = parts[1].toLong(),
+                            folderId = parts[1],
                             folderName = parts[2],
                             timestamp = parts[3].toLong(),
                             status = com.baluhost.android.domain.model.sync.SyncHistoryStatus.valueOf(parts[4]),
@@ -278,7 +278,7 @@ class PreferencesManager @Inject constructor(
         } else {
             mutableListOf()
         }
-        
+
         // Add new entry at the beginning
         existingHistory.add(0, history)
         
@@ -299,7 +299,7 @@ class PreferencesManager @Inject constructor(
         }
     }
     
-    fun getSyncHistory(folderId: Long? = null): Flow<List<com.baluhost.android.domain.model.sync.SyncHistory>> = flow {
+    fun getSyncHistory(folderId: String? = null): Flow<List<com.baluhost.android.domain.model.sync.SyncHistory>> = flow {
         val key = stringPreferencesKey("sync_history")
         val historyJson = dataStore.data.map { prefs -> prefs[key] }.first()
         
@@ -312,7 +312,7 @@ class PreferencesManager @Inject constructor(
                     if (parts.size >= 10) {
                         com.baluhost.android.domain.model.sync.SyncHistory(
                             id = parts[0],
-                            folderId = parts[1].toLong(),
+                            folderId = parts[1],
                             folderName = parts[2],
                             timestamp = parts[3].toLong(),
                             status = com.baluhost.android.domain.model.sync.SyncHistoryStatus.valueOf(parts[4]),
@@ -330,7 +330,7 @@ class PreferencesManager @Inject constructor(
                     null
                 }
             }
-            
+
             // Filter by folderId if provided
             val filtered = if (folderId != null) {
                 history.filter { it.folderId == folderId }
