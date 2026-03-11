@@ -3,6 +3,7 @@ package com.baluhost.android.di
 import android.content.Context
 import com.baluhost.android.BuildConfig
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.data.remote.api.ActivityApi
 import com.baluhost.android.data.remote.api.AuthApi
 import com.baluhost.android.data.remote.api.EnergyApi
 import com.baluhost.android.data.remote.api.FilesApi
@@ -156,6 +157,12 @@ object NetworkModule {
     @Singleton
     fun provideSharesApi(retrofit: Retrofit): SharesApi {
         return retrofit.create(SharesApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideActivityApi(retrofit: Retrofit): ActivityApi {
+        return retrofit.create(ActivityApi::class.java)
     }
     
     @Provides

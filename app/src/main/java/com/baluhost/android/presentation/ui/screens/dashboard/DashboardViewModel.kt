@@ -8,12 +8,14 @@ import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.model.OperationStatus
 import com.baluhost.android.domain.model.RaidArray
+import com.baluhost.android.domain.model.RecentFile
 import com.baluhost.android.domain.model.ShareStatistics
 import com.baluhost.android.domain.model.SmartDeviceInfo
 import com.baluhost.android.domain.model.SystemInfo
 import com.baluhost.android.domain.model.sync.SyncStatus
 import com.baluhost.android.domain.repository.OfflineQueueRepository
 import com.baluhost.android.domain.repository.SyncRepository
+import com.baluhost.android.domain.usecase.activity.GetRecentFilesUseCase
 import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
 import com.baluhost.android.domain.usecase.system.GetEnergyDashboardUseCase
@@ -38,6 +40,7 @@ import javax.inject.Inject
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
     private val getFilesUseCase: GetFilesUseCase,
+    private val getRecentFilesUseCase: GetRecentFilesUseCase,
     private val getCacheStatsUseCase: GetCacheStatsUseCase,
     private val getSystemTelemetryUseCase: GetSystemTelemetryUseCase,
     private val getEnergyDashboardUseCase: GetEnergyDashboardUseCase,
@@ -168,11 +171,24 @@ class DashboardViewModel @Inject constructor(
                     else -> null
                 }
 
-                // Load recent files (from root)
-                val filesResult = getFilesUseCase("/", forceRefresh = false)
-                val recentFiles = when (filesResult) {
-                    is Result.Success -> filesResult.data.take(5)
+                // Load recent files from activity tracking (with fallback to root listing)
+                val recentFilesResult = getRecentFilesUseCase(limit = 5)
+                val recentFiles = when (recentFilesResult) {
+                    is Result.Success -> recentFilesResult.data
+                    is Result.Error -> {
+                        Log.w("DashboardViewModel", "Activity API unavailable, falling back to root listing")
+                        emptyList()
+                    }
                     else -> emptyList()
+                }
+                val fallbackFiles = if (recentFiles.isEmpty()) {
+                    val filesResult = getFilesUseCase("/", forceRefresh = false)
+                    when (filesResult) {
+                        is Result.Success -> filesResult.data.take(5)
+                        else -> emptyList()
+                    }
+                } else {
+                    emptyList()
                 }
 
                 // Load cache stats
@@ -187,6 +203,7 @@ class DashboardViewModel @Inject constructor(
                     smartDevices = smartDevices,
                     shareStats = shareStats,
                     recentFiles = recentFiles,
+                    fallbackFiles = fallbackFiles,
                     cacheFileCount = cacheStats.fileCount,
                     error = null
                 )
@@ -336,7 +353,8 @@ data class DashboardUiState(
     val raidArrays: List<RaidArray> = emptyList(),
     val smartDevices: List<SmartDeviceInfo> = emptyList(),
     val shareStats: ShareStatistics? = null,
-    val recentFiles: List<FileItem> = emptyList(),
+    val recentFiles: List<RecentFile> = emptyList(),
+    val fallbackFiles: List<FileItem> = emptyList(),
     val cacheFileCount: Int = 0,
     val error: String? = null,
     val pendingSyncCount: Int = 0,

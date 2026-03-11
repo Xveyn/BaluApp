@@ -35,7 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.domain.model.EnergyDashboard
+import com.baluhost.android.domain.model.FileAction
 import com.baluhost.android.domain.model.FileItem
+import com.baluhost.android.domain.model.RecentFile
 import com.baluhost.android.domain.model.ShareStatistics
 import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
@@ -358,6 +360,7 @@ fun DashboardScreen(
                     // Recent Activity Section
                     RecentActivityCard(
                         recentFiles = uiState.recentFiles,
+                        fallbackFiles = uiState.fallbackFiles,
                         isActivated = activatedCard == "recent",
                         onClick = { activatedCard = "recent" },
                         onViewAll = onNavigateToFiles
@@ -656,7 +659,77 @@ private fun RaidArrayCard(raid: com.baluhost.android.domain.model.RaidArray) {
 }
 
 @Composable
-private fun RecentFileItem(file: FileItem) {
+private fun RecentFileItem(file: RecentFile) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                imageVector = when {
+                    file.isDirectory -> Icons.Default.Folder
+                    file.fileName.endsWith(".pdf") -> Icons.Default.Description
+                    file.fileName.endsWith(".jpg") || file.fileName.endsWith(".png") -> Icons.Default.Image
+                    file.fileName.endsWith(".mp4") -> Icons.Default.VideoFile
+                    else -> Icons.Default.InsertDriveFile
+                },
+                contentDescription = null,
+                tint = if (file.isDirectory) Sky400 else Color(0xFF818CF8),
+                modifier = Modifier.size(32.dp)
+            )
+            // Action badge
+            Icon(
+                imageVector = when (file.lastAction) {
+                    FileAction.DOWNLOAD -> Icons.Default.Download
+                    FileAction.UPLOAD -> Icons.Default.Upload
+                    FileAction.EDIT -> Icons.Default.Edit
+                    FileAction.DELETE -> Icons.Default.Delete
+                    FileAction.SHARE -> Icons.Default.Share
+                    FileAction.MOVE -> Icons.Default.DriveFileMove
+                    FileAction.RENAME -> Icons.Default.DriveFileRenameOutline
+                    else -> Icons.Default.TouchApp
+                },
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .size(14.dp)
+                    .align(Alignment.BottomEnd)
+                    .background(Color(0xFF3B82F6), CircleShape)
+                    .padding(1.dp)
+            )
+        }
+
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = file.fileName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                color = Color(0xFFF1F5F9),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${file.lastAction.displayLabel} · ${formatRelativeTime(file.lastActionAt.epochSecond)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF94A3B8)
+            )
+        }
+
+        if (!file.isDirectory && file.fileSize != null) {
+            Text(
+                text = file.displaySize,
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF94A3B8)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FallbackFileItem(file: FileItem) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -676,7 +749,7 @@ private fun RecentFileItem(file: FileItem) {
             tint = if (file.isDirectory) Sky400 else Color(0xFF818CF8),
             modifier = Modifier.size(32.dp)
         )
-        
+
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = file.name,
@@ -690,7 +763,7 @@ private fun RecentFileItem(file: FileItem) {
                 color = Color(0xFF94A3B8)
             )
         }
-        
+
         if (!file.isDirectory) {
             Text(
                 text = formatFileSize(file.size),
@@ -704,6 +777,21 @@ private fun RecentFileItem(file: FileItem) {
 private fun formatDate(timestamp: Long): String {
     val sdf = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
     return sdf.format(Date(timestamp * 1000))
+}
+
+private fun formatRelativeTime(epochSeconds: Long): String {
+    val now = System.currentTimeMillis() / 1000
+    val diff = now - epochSeconds
+    return when {
+        diff < 60 -> "gerade eben"
+        diff < 3600 -> "${diff / 60} Min."
+        diff < 86400 -> "${diff / 3600} Std."
+        diff < 604800 -> "${diff / 86400} Tage"
+        else -> {
+            val sdf = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
+            sdf.format(Date(epochSeconds * 1000))
+        }
+    }
 }
 
 @Composable
@@ -1312,12 +1400,14 @@ private fun ShareStatColumn(
 
 @Composable
 private fun RecentActivityCard(
-    recentFiles: List<FileItem>,
+    recentFiles: List<RecentFile>,
+    fallbackFiles: List<FileItem> = emptyList(),
     isActivated: Boolean = false,
     onClick: (() -> Unit)? = null,
     onViewAll: () -> Unit
 ) {
     val recentGradient = listOf(Color(0xFF3B82F6), Color(0xFF818CF8))
+    val hasActivityData = recentFiles.isNotEmpty()
 
     val glowAlpha by animateFloatAsState(
         targetValue = if (isActivated) 1f else 0f,
@@ -1365,7 +1455,7 @@ private fun RecentActivityCard(
                         letterSpacing = 1.2.sp
                     )
                     Text(
-                        text = "Recent Files",
+                        text = if (hasActivityData) "Zuletzt verwendet" else "Dateien",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         color = Color.White,
@@ -1381,7 +1471,7 @@ private fun RecentActivityCard(
                 }
             }
 
-            if (recentFiles.isEmpty()) {
+            if (recentFiles.isEmpty() && fallbackFiles.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1391,17 +1481,25 @@ private fun RecentActivityCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        "No recent files",
+                        "Noch keine Aktivität",
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFF64748B)
                     )
                 }
-            } else {
+            } else if (hasActivityData) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     recentFiles.take(5).forEach { file ->
                         RecentFileItem(file = file)
+                    }
+                }
+            } else {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    fallbackFiles.take(5).forEach { file ->
+                        FallbackFileItem(file = file)
                     }
                 }
             }

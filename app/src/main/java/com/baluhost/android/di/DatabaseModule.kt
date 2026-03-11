@@ -72,4 +72,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun providePendingOperationDao(database: BaluHostDatabase) = database.pendingOperationDao()
+
+    @Provides
+    @Singleton
+    fun provideFileActivityDao(database: BaluHostDatabase) = database.fileActivityDao()
 }
