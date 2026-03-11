@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import com.baluhost.android.data.worker.OfflineQueueWorkScheduler
+import com.baluhost.android.data.worker.SyncScheduleWorkScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -37,6 +38,9 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
         
         // Schedule cache cleanup worker (daily, LRU + age-based)
         OfflineQueueWorkScheduler.scheduleCacheCleanup(this)
+
+        // Schedule periodic sync schedule refresh (every 30 minutes)
+        SyncScheduleWorkScheduler.schedulePeriodicRefresh(this)
     }
     
     override val workManagerConfiguration: Configuration

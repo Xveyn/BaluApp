@@ -95,4 +95,43 @@ interface SyncRepository {
      * Get sync schedules from server.
      */
     suspend fun getSyncSchedules(): Result<List<SyncSchedule>>
+
+    /**
+     * Create a new sync schedule on the server.
+     */
+    suspend fun createSyncSchedule(
+        deviceId: String,
+        scheduleType: ScheduleType,
+        timeOfDay: String?,
+        dayOfWeek: Int? = null,
+        dayOfMonth: Int? = null,
+        syncDeletions: Boolean = true,
+        resolveConflicts: String = "keep_newest",
+        autoVpn: Boolean = false
+    ): Result<SyncSchedule>
+
+    /**
+     * Update an existing sync schedule.
+     */
+    suspend fun updateSyncSchedule(
+        scheduleId: Int,
+        scheduleType: ScheduleType? = null,
+        timeOfDay: String? = null,
+        dayOfWeek: Int? = null,
+        dayOfMonth: Int? = null,
+        enabled: Boolean? = null,
+        syncDeletions: Boolean? = null,
+        resolveConflicts: String? = null,
+        autoVpn: Boolean? = null
+    ): Result<SyncSchedule>
+
+    /**
+     * Disable a sync schedule.
+     */
+    suspend fun disableSyncSchedule(scheduleId: Int): Result<Unit>
+
+    /**
+     * Enable a sync schedule.
+     */
+    suspend fun enableSyncSchedule(scheduleId: Int): Result<Unit>
 }

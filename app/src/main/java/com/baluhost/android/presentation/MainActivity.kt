@@ -70,10 +70,11 @@ class MainActivity : AppCompatActivity() {
                     var shouldShowLock by remember { mutableStateOf(false) }
                     val lifecycleOwner = LocalLifecycleOwner.current
                     
-                    // Check lock screen on every resume
+                    // Check lock screen on every start (not resume, to avoid false triggers from notification shade)
+                    // Also refresh sync schedules on resume
                     DisposableEffect(lifecycleOwner) {
                         val observer = LifecycleEventObserver { _, event ->
-                            if (event == Lifecycle.Event.ON_RESUME) {
+                            if (event == Lifecycle.Event.ON_START) {
                                 lifecycleScope.launch {
                                     val showLock = appLockManager.shouldShowLockScreen()
                                     if (showLock) {
@@ -83,6 +84,10 @@ class MainActivity : AppCompatActivity() {
                                         Log.d(TAG, "App lock check: no lock needed")
                                     }
                                 }
+                            }
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                com.baluhost.android.data.worker.SyncScheduleWorkScheduler
+                                    .triggerImmediateRefresh(this@MainActivity)
                             }
                         }
                         lifecycleOwner.lifecycle.addObserver(observer)

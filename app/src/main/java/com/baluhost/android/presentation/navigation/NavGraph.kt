@@ -20,6 +20,7 @@ import com.baluhost.android.presentation.ui.screens.splash.SplashScreen
 import com.baluhost.android.presentation.ui.screens.storage.StorageOverviewScreen
 import com.baluhost.android.presentation.ui.screens.shares.SharesScreen
 import com.baluhost.android.presentation.ui.screens.sync.FolderSyncScreen
+import com.baluhost.android.presentation.ui.screens.sync.SyncScheduleScreen
 import com.baluhost.android.presentation.ui.screens.vpn.VpnScreen
 import java.net.URLDecoder
 
@@ -158,6 +159,17 @@ fun NavGraph(
 
         composable(Screen.FolderSync.route) {
             FolderSyncScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                },
+                onNavigateToSchedule = {
+                    navController.navigate(Screen.SyncSchedule.route)
+                }
+            )
+        }
+
+        composable(Screen.SyncSchedule.route) {
+            SyncScheduleScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

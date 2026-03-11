@@ -32,9 +32,6 @@ class PreferencesManager @Inject constructor(
     private val usernameKey = stringPreferencesKey(Constants.PrefsKeys.USERNAME)
     private val userRoleKey = stringPreferencesKey("user_role")
     private val devModeKey = stringPreferencesKey("dev_mode")
-    private val cameraBackupEnabledKey = stringPreferencesKey(Constants.PrefsKeys.CAMERA_BACKUP_ENABLED)
-    private val wifiOnlyKey = stringPreferencesKey(Constants.PrefsKeys.WIFI_ONLY)
-    private val lastBackupTimeKey = stringPreferencesKey(Constants.PrefsKeys.LAST_BACKUP_TIME)
     private val vpnConfigKey = stringPreferencesKey(Constants.PrefsKeys.VPN_CONFIG)
     private val fcmTokenKey = stringPreferencesKey("fcm_token")
     private val deviceIdKey = stringPreferencesKey("device_id")
@@ -101,37 +98,6 @@ class PreferencesManager @Inject constructor(
     fun getDevMode(): Flow<Boolean> {
         return dataStore.data.map { prefs -> 
             prefs[devModeKey]?.toBoolean() ?: false 
-        }
-    }
-    
-    // Camera Backup Settings
-    suspend fun saveCameraBackupEnabled(enabled: Boolean) {
-        dataStore.edit { prefs -> prefs[cameraBackupEnabledKey] = enabled.toString() }
-    }
-    
-    fun isCameraBackupEnabled(): Flow<Boolean> {
-        return dataStore.data.map { prefs -> 
-            prefs[cameraBackupEnabledKey]?.toBoolean() ?: false 
-        }
-    }
-    
-    suspend fun saveWifiOnly(wifiOnly: Boolean) {
-        dataStore.edit { prefs -> prefs[wifiOnlyKey] = wifiOnly.toString() }
-    }
-    
-    fun isWifiOnly(): Flow<Boolean> {
-        return dataStore.data.map { prefs -> 
-            prefs[wifiOnlyKey]?.toBoolean() ?: true 
-        }
-    }
-    
-    suspend fun saveLastBackupTime(timestamp: Long) {
-        dataStore.edit { prefs -> prefs[lastBackupTimeKey] = timestamp.toString() }
-    }
-    
-    fun getLastBackupTime(): Flow<Long> {
-        return dataStore.data.map { prefs -> 
-            prefs[lastBackupTimeKey]?.toLongOrNull() ?: 0L 
         }
     }
     
@@ -360,6 +326,17 @@ class PreferencesManager @Inject constructor(
         emit(summary)
     }
     
+    // Auto-VPN for sync preference
+    suspend fun saveAutoVpnForSync(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("auto_vpn_for_sync")] = enabled.toString() }
+    }
+
+    fun isAutoVpnForSync(): Flow<Boolean> {
+        return dataStore.data.map { prefs ->
+            prefs[stringPreferencesKey("auto_vpn_for_sync")]?.toBoolean() ?: false
+        }
+    }
+
     // Sync Schedules cache (for offline availability)
     suspend fun saveSyncSchedules(schedules: List<com.baluhost.android.domain.model.sync.SyncSchedule>) {
         val key = stringPreferencesKey("sync_schedules_cache")
@@ -367,7 +344,7 @@ class PreferencesManager @Inject constructor(
             "${s.scheduleId}::${s.deviceId}::${s.scheduleType.toApiString()}::" +
             "${s.timeOfDay}::${s.dayOfWeek ?: "null"}::${s.dayOfMonth ?: "null"}::" +
             "${s.nextRunAt ?: "null"}::${s.lastRunAt ?: "null"}::" +
-            "${s.enabled}::${s.syncDeletions}::${s.resolveConflicts}"
+            "${s.enabled}::${s.syncDeletions}::${s.resolveConflicts}::${s.autoVpn}"
         }
         dataStore.edit { prefs -> prefs[key] = serialized }
     }
@@ -392,7 +369,8 @@ class PreferencesManager @Inject constructor(
                         lastRunAt = parts[7].takeIf { it != "null" }?.toLongOrNull(),
                         enabled = parts[8].toBoolean(),
                         syncDeletions = parts[9].toBoolean(),
-                        resolveConflicts = parts[10]
+                        resolveConflicts = parts[10],
+                        autoVpn = parts.getOrNull(11)?.toBoolean() ?: false
                     )
                 } else null
             } catch (e: Exception) {
