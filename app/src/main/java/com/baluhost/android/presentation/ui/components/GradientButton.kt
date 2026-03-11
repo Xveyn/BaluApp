@@ -9,7 +9,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -40,7 +39,7 @@ fun GradientButton(
             )
             .then(
                 if (enabled) Modifier.clickable(onClick = onClick)
-                else Modifier.alpha(0.5f)
+                else Modifier
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -48,7 +47,7 @@ fun GradientButton(
             text = text,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White,
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.5f),
             modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }
@@ -77,7 +76,7 @@ fun GradientButtonSmall(
             )
             .then(
                 if (enabled) Modifier.clickable(onClick = onClick)
-                else Modifier.alpha(0.5f)
+                else Modifier
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -85,7 +84,7 @@ fun GradientButtonSmall(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            color = Color.White,
+            color = if (enabled) Color.White else Color.White.copy(alpha = 0.5f),
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         )
     }

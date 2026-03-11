@@ -36,16 +36,10 @@
     
     <!-- Settings -->
     <string name="settings_title">Settings</string>
-    <string name="camera_backup">Camera Backup</string>
-    <string name="camera_backup_enabled">Automatic backup enabled</string>
-    <string name="wifi_only">WiFi only</string>
     <string name="logout">Logout</string>
-    
+
     <!-- Notifications -->
     <string name="vpn_notification_channel">VPN Service</string>
     <string name="vpn_notification_title">BaluHost VPN</string>
     <string name="vpn_notification_text">Connection active</string>
-    <string name="backup_notification_channel">Camera Backup</string>
-    <string name="backup_notification_title">Camera Backup</string>
-    <string name="backup_notification_progress">Backing up photos…</string>
 </resources>
