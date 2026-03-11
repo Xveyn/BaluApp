@@ -36,6 +36,7 @@ class FilesViewModel @Inject constructor(
     private val downloadFileUseCase: DownloadFileUseCase,
     private val deleteFileUseCase: DeleteFileUseCase,
     private val moveFileUseCase: com.baluhost.android.domain.usecase.files.MoveFileUseCase,
+    private val trackFileActivityUseCase: com.baluhost.android.domain.usecase.activity.TrackFileActivityUseCase,
     private val preferencesManager: PreferencesManager,
     private val networkMonitor: NetworkMonitor,
     private val serverConnectivityChecker: ServerConnectivityChecker,
@@ -400,6 +401,12 @@ class FilesViewModel @Inject constructor(
             val result = uploadFileUseCase(file, uploadPath)
             when (result) {
                 is Result.Success -> {
+                    trackFileActivityUseCase(
+                        action = com.baluhost.android.domain.model.FileAction.UPLOAD,
+                        filePath = "$uploadPath/${file.name}",
+                        fileName = file.name,
+                        fileSize = file.length()
+                    )
                     _uiState.value = _uiState.value.copy(
                         isUploading = false,
                         uploadProgress = 0f
@@ -435,6 +442,13 @@ class FilesViewModel @Inject constructor(
             val result = downloadFileUseCase(filePath, destinationFile)
             when (result) {
                 is Result.Success -> {
+                    val fileName = filePath.substringAfterLast('/')
+                    trackFileActivityUseCase(
+                        action = com.baluhost.android.domain.model.FileAction.DOWNLOAD,
+                        filePath = filePath,
+                        fileName = fileName,
+                        fileSize = destinationFile.length()
+                    )
                     _uiState.value = _uiState.value.copy(
                         isDownloading = false,
                         downloadProgress = 0f
@@ -522,10 +536,16 @@ class FilesViewModel @Inject constructor(
             }
             
             val result = deleteFileUseCase(filePath)
-            
+
             when (result) {
                 is Result.Success -> {
                     android.util.Log.d("FilesViewModel", "Delete successful, refreshing list")
+                    val fileName = filePath.substringAfterLast('/')
+                    trackFileActivityUseCase(
+                        action = com.baluhost.android.domain.model.FileAction.DELETE,
+                        filePath = filePath,
+                        fileName = fileName
+                    )
                     loadFiles(_uiState.value.currentPath) // Refresh list
                 }
                 is Result.Error -> {
