@@ -11,11 +11,12 @@ data class SyncSchedule(
     val lastRunAt: Long?,
     val enabled: Boolean,
     val syncDeletions: Boolean,
-    val resolveConflicts: String
+    val resolveConflicts: String,
+    val autoVpn: Boolean = false
 )
 
 enum class ScheduleType {
-    DAILY, WEEKLY, MONTHLY, MANUAL;
+    DAILY, WEEKLY, MONTHLY, ON_CHANGE, MANUAL;
 
     companion object {
         fun fromString(value: String): ScheduleType {

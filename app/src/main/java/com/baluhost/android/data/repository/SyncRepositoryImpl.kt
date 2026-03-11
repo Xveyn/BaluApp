@@ -254,6 +254,81 @@ class SyncRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun createSyncSchedule(
+        deviceId: String,
+        scheduleType: ScheduleType,
+        timeOfDay: String?,
+        dayOfWeek: Int?,
+        dayOfMonth: Int?,
+        syncDeletions: Boolean,
+        resolveConflicts: String,
+        autoVpn: Boolean
+    ): Result<SyncSchedule> {
+        return try {
+            val dto = SyncScheduleCreateDto(
+                deviceId = deviceId,
+                scheduleType = scheduleType.toApiString(),
+                timeOfDay = timeOfDay,
+                dayOfWeek = dayOfWeek,
+                dayOfMonth = dayOfMonth,
+                syncDeletions = syncDeletions,
+                resolveConflicts = resolveConflicts,
+                autoVpn = autoVpn
+            )
+            val response = syncApi.createSyncSchedule(dto)
+            Result.success(response.toDomain())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun updateSyncSchedule(
+        scheduleId: Int,
+        scheduleType: ScheduleType?,
+        timeOfDay: String?,
+        dayOfWeek: Int?,
+        dayOfMonth: Int?,
+        enabled: Boolean?,
+        syncDeletions: Boolean?,
+        resolveConflicts: String?,
+        autoVpn: Boolean?
+    ): Result<SyncSchedule> {
+        return try {
+            val dto = SyncScheduleUpdateDto(
+                scheduleType = scheduleType?.toApiString(),
+                timeOfDay = timeOfDay,
+                dayOfWeek = dayOfWeek,
+                dayOfMonth = dayOfMonth,
+                isActive = enabled,
+                syncDeletions = syncDeletions,
+                resolveConflicts = resolveConflicts,
+                autoVpn = autoVpn
+            )
+            val response = syncApi.updateSyncSchedule(scheduleId, dto)
+            Result.success(response.toDomain())
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun disableSyncSchedule(scheduleId: Int): Result<Unit> {
+        return try {
+            syncApi.disableSyncSchedule(scheduleId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun enableSyncSchedule(scheduleId: Int): Result<Unit> {
+        return try {
+            syncApi.enableSyncSchedule(scheduleId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
 
 /**
@@ -306,7 +381,8 @@ private fun SyncScheduleDto.toDomain() = SyncSchedule(
     lastRunAt = lastRunAt?.let { parseIsoTimestamp(it) },
     enabled = enabled,
     syncDeletions = syncDeletions,
-    resolveConflicts = resolveConflicts
+    resolveConflicts = resolveConflicts,
+    autoVpn = autoVpn
 )
 
 /**

@@ -157,4 +157,31 @@ interface SyncApi {
      */
     @GET("sync/schedule/list")
     suspend fun getSyncSchedules(): SyncScheduleListResponseDto
+
+    /**
+     * Create a new sync schedule.
+     */
+    @POST("sync/schedule/create")
+    suspend fun createSyncSchedule(@Body schedule: SyncScheduleCreateDto): SyncScheduleDto
+
+    /**
+     * Update an existing sync schedule.
+     */
+    @PUT("sync/schedule/{schedule_id}")
+    suspend fun updateSyncSchedule(
+        @Path("schedule_id") scheduleId: Int,
+        @Body updates: SyncScheduleUpdateDto
+    ): SyncScheduleDto
+
+    /**
+     * Disable a sync schedule.
+     */
+    @POST("sync/schedule/{schedule_id}/disable")
+    suspend fun disableSyncSchedule(@Path("schedule_id") scheduleId: Int)
+
+    /**
+     * Enable a sync schedule.
+     */
+    @POST("sync/schedule/{schedule_id}/enable")
+    suspend fun enableSyncSchedule(@Path("schedule_id") scheduleId: Int)
 }

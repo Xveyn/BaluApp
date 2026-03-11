@@ -32,4 +32,5 @@ sealed class Screen(val route: String) {
     object PowerDetail : Screen("power_detail")
     object StorageDetail : Screen("storage_detail")
     object SharesDetail : Screen("shares_detail")
+    object SyncSchedule : Screen("sync_schedule")
 }

@@ -42,6 +42,7 @@ import kotlinx.coroutines.delay
 @Composable
 fun FolderSyncScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToSchedule: () -> Unit = {},
     viewModel: FolderSyncViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -89,10 +90,17 @@ fun FolderSyncScreen(
                     }
                 },
                 actions = {
+                    IconButton(onClick = onNavigateToSchedule) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = "Zeitpläne",
+                            tint = Sky400
+                        )
+                    }
                     IconButton(onClick = { showWebDavDialog = true }) {
                         Icon(
-                            imageVector = Icons.Default.Cloud, 
-                            contentDescription = "WebDAV-Browser", 
+                            imageVector = Icons.Default.Cloud,
+                            contentDescription = "WebDAV-Browser",
                             tint = Sky400
                         )
                     }

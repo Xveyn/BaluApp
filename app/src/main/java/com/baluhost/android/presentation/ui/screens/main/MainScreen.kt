@@ -116,6 +116,9 @@ fun MainScreen(
                             navController.navigate(Screen.Dashboard.route) {
                                 popUpTo(Screen.Dashboard.route) { inclusive = false }
                             }
+                        },
+                        onNavigateToSchedule = {
+                            parentNavController.navigate(Screen.SyncSchedule.route)
                         }
                     )
                 }
