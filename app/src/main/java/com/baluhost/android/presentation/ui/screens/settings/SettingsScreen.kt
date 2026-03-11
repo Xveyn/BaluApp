@@ -136,26 +136,6 @@ fun SettingsScreen(
                     onSetLockTimeout = viewModel::setLockTimeout
                 )
 
-                // Camera Backup Settings Card
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    intensity = GlassIntensity.Medium
-                ) {
-                    Text(
-                        text = "KAMERA-BACKUP",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
-                        letterSpacing = 2.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text(
-                        text = "Backup-Einstellungen werden hier angezeigt",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate400
-                    )
-                }
-
                 // Cache Management Card
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),

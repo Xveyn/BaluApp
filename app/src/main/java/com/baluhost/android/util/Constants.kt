@@ -19,12 +19,6 @@ object Constants {
     const val VPN_NOTIFICATION_ID = 2001
     const val VPN_NOTIFICATION_CHANNEL = "vpn_service_channel"
 
-    // Camera Backup
-    const val BACKUP_NOTIFICATION_ID = 2002
-    const val BACKUP_NOTIFICATION_CHANNEL = "backup_service_channel"
-    const val BACKUP_WORK_NAME = "camera_backup"
-    const val BACKUP_INTERVAL_HOURS = 6L
-    
     // Database
     const val DATABASE_NAME = "baluhost.db"
     const val DATABASE_VERSION = 1
@@ -36,9 +30,6 @@ object Constants {
         const val SERVER_URL = "server_url"
         const val USER_ID = "user_id"
         const val USERNAME = "username"
-        const val CAMERA_BACKUP_ENABLED = "camera_backup_enabled"
-        const val WIFI_ONLY = "wifi_only"
-        const val LAST_BACKUP_TIME = "last_backup_time"
         const val VPN_CONFIG = "vpn_config"
     }
     

@@ -1,10 +1,8 @@
 package com.baluhost.android.data.remote.api
 
-import com.baluhost.android.data.remote.dto.CameraSettingsDto
 import com.baluhost.android.data.remote.dto.MobileDeviceDto
 import com.baluhost.android.data.remote.dto.RegisterDeviceRequest
 import com.baluhost.android.data.remote.dto.RegisterDeviceResponse
-import com.baluhost.android.data.remote.dto.UpdateCameraSettingsRequest
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
@@ -30,17 +28,6 @@ interface MobileApi {
     suspend fun getDevice(
         @Path("deviceId") deviceId: Int
     ): MobileDeviceDto
-    
-    @GET("mobile/camera/settings/{deviceId}")
-    suspend fun getCameraSettings(
-        @Path("deviceId") deviceId: Int
-    ): CameraSettingsDto
-    
-    @PUT("mobile/camera/settings/{deviceId}")
-    suspend fun updateCameraSettings(
-        @Path("deviceId") deviceId: Int,
-        @Body request: UpdateCameraSettingsRequest
-    ): CameraSettingsDto
     
     @DELETE("mobile/devices/{deviceId}")
     suspend fun deleteDevice(

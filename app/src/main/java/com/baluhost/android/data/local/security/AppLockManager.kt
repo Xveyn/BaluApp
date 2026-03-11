@@ -121,9 +121,9 @@ class AppLockManager @Inject constructor(
      * Reset lock timer (call after successful authentication).
      */
     suspend fun onAppForeground() {
-        // Clear the timestamp completely so next cold start shows lock screen
+        // Set timestamp to now so timeout starts fresh after authentication
         dataStore.edit { prefs ->
-            prefs.remove(KEY_LAST_BACKGROUND_TIME)
+            prefs[KEY_LAST_BACKGROUND_TIME] = System.currentTimeMillis()
         }
         android.util.Log.d(TAG, "App came to foreground, lock timer reset")
     }

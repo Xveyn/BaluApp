@@ -65,20 +65,3 @@ data class MobileDeviceDto(
     val expiresAt: String? = null
 )
 
-data class CameraSettingsDto(
-    @SerializedName("backup_enabled")
-    val backupEnabled: Boolean,
-    @SerializedName("wifi_only")
-    val wifiOnly: Boolean,
-    @SerializedName("backup_folder")
-    val backupFolder: String
-)
-
-data class UpdateCameraSettingsRequest(
-    @SerializedName("backup_enabled")
-    val backupEnabled: Boolean?,
-    @SerializedName("wifi_only")
-    val wifiOnly: Boolean?,
-    @SerializedName("backup_folder")
-    val backupFolder: String?
-)
