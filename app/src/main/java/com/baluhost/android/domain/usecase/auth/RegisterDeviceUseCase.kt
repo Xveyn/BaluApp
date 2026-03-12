@@ -90,7 +90,7 @@ class RegisterDeviceUseCase @Inject constructor(
                 try {
                     dynamicMobileApi.registerPushToken(
                         response.device.id,
-                        mapOf("token" to fcmToken)
+                        fcmToken
                     )
                     android.util.Log.d("RegisterDevice", "FCM token sent to backend")
                 } catch (e: Exception) {
