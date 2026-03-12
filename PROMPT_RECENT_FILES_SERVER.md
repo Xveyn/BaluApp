@@ -20,19 +20,19 @@ Das System ist **server-dominant**: Der Server ist die primäre Quelle der Wahrh
 ### Wie funktioniert die Synchronisation?
 
 ```
-┌─────────────┐                    ┌──────────────┐
+┌───────────-──┐                    ┌───────────────┐
 │  BaluApp     │                    │  BaluHost     │
 │  (Android)   │                    │  (Server)     │
 │              │                    │               │
-│  Client      │───── POST ────────▶  Activity Log │
+│  Client      │───── POST ────────▶|  Activity Log │
 │  Events:     │  /activity/report  │  (DB Table)   │
 │  - file.open │                    │               │
-│  - file.view │◀── GET ───────────│  Aggregiert:  │
+│  - file.view │◀── GET ─────────-──│  Aggregiert:  │
 │  - download  │  /activity/recent  │  - Server-Ops │
 │              │                    │  - Client-Ops │
-│  Local Cache │◀── GET ───────────│  - SMB-Ops    │
+│  Local Cache │◀── GET ────────────│  - SMB-Ops    │
 │  (Room DB)   │  /activity/feed    │  - WebDAV-Ops │
-└─────────────┘                    └──────────────┘
+└──────────-───┘                    └───────────────┘
 ```
 
 1. **Server trackt automatisch:** Jede Datei-Operation die über BaluHost-Endpoints läuft (Upload, Download, Delete, Move, Rename, Permission-Change) erzeugt automatisch einen Activity-Eintrag.

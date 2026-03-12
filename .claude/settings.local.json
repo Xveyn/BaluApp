@@ -64,7 +64,9 @@
       "Bash(\"C:\\\\Users\\\\SvenB\\\\AppData\\\\Local\\\\Android\\\\Sdk\\\\platform-tools\\\\adb.exe\":*)",
       "WebSearch",
       "Bash(head:*)",
-      "Bash(\"/c/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/adb.exe\" shell:*)"
+      "Bash(\"/c/Users/SvenB/AppData/Local/Android/Sdk/platform-tools/adb.exe\" shell:*)",
+      "Bash(cat \"D:\\\\Programme \\(x86\\)\\\\BaluApp/.gitignore\" 2>&1)",
+      "Bash(cd \"D:/Programme \\(x86\\)/BaluApp\" && export JAVA_HOME=\"/c/Program Files/Android/Android Studio/jbr\" && export PATH=\"$JAVA_HOME/bin:$PATH\" && ./gradlew compileDebugKotlin 2>&1 | tail -15)"
     ]
   }
 }
