@@ -29,6 +29,7 @@ import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 /**
@@ -163,6 +164,24 @@ object NetworkModule {
     @Singleton
     fun provideActivityApi(retrofit: Retrofit): ActivityApi {
         return retrofit.create(ActivityApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    fun provideNotificationsApi(retrofit: Retrofit): com.baluhost.android.data.remote.api.NotificationsApi {
+        return retrofit.create(com.baluhost.android.data.remote.api.NotificationsApi::class.java)
+    }
+
+    @Provides
+    @Singleton
+    @Named("websocket")
+    fun provideWebSocketOkHttpClient(): OkHttpClient {
+        return OkHttpClient.Builder()
+            .connectTimeout(Constants.CONNECT_TIMEOUT, TimeUnit.SECONDS)
+            .readTimeout(0, TimeUnit.MILLISECONDS) // No read timeout for WebSocket
+            .writeTimeout(Constants.WRITE_TIMEOUT, TimeUnit.SECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
     }
     
     @Provides

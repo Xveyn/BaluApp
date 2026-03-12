@@ -38,6 +38,7 @@ fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSplash: () -> Unit,
     onNavigateToFolderSync: () -> Unit,
+    onNavigateToNotificationPreferences: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     vpnViewModel: VpnViewModel = hiltViewModel()
 ) {
@@ -207,6 +208,40 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !uiState.isClearingCache && uiState.cacheFileCount > 0
                     )
+                }
+
+                // Notification Settings Card
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    intensity = GlassIntensity.Medium,
+                    onClick = onNavigateToNotificationPreferences
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "BENACHRICHTIGUNGEN",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Slate500,
+                                letterSpacing = 2.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Push, In-App und Ruhezeiten konfigurieren",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Slate400
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Öffnen",
+                            tint = Sky400
+                        )
+                    }
                 }
 
                 // Folder Sync Settings Card

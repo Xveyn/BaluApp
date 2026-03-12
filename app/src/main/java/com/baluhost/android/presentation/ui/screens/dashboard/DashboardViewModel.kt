@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.data.notification.NotificationWebSocketManager
 import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.model.OperationStatus
@@ -50,11 +51,14 @@ class DashboardViewModel @Inject constructor(
     private val preferencesManager: PreferencesManager,
     private val networkStateManager: NetworkStateManager,
     private val offlineQueueRepository: OfflineQueueRepository,
-    private val syncRepository: SyncRepository
+    private val syncRepository: SyncRepository,
+    private val notificationWebSocketManager: NotificationWebSocketManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
+
+    val unreadNotificationCount: StateFlow<Int> = notificationWebSocketManager.unreadCount
     
     // VPN-related state flows
     private val _isInHomeNetwork = MutableStateFlow<Boolean?>(null)

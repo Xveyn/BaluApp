@@ -10,6 +10,7 @@ import com.baluhost.android.domain.model.AuthResult
 import com.baluhost.android.domain.model.MobileDevice
 import com.baluhost.android.domain.model.User
 import com.baluhost.android.util.Result
+import kotlinx.coroutines.flow.first
 import java.time.Instant
 import javax.inject.Inject
 
@@ -82,6 +83,20 @@ class RegisterDeviceUseCase @Inject constructor(
             preferencesManager.saveUserRole(response.user.role)
             preferencesManager.saveDeviceId(response.device.id)  // Already a String (UUID)
             preferencesManager.saveVpnDeviceName(response.device.deviceName)
+
+            // Send stored FCM token to backend
+            val fcmToken = preferencesManager.getFcmToken().first()
+            if (!fcmToken.isNullOrEmpty()) {
+                try {
+                    dynamicMobileApi.registerPushToken(
+                        response.device.id,
+                        mapOf("token" to fcmToken)
+                    )
+                    android.util.Log.d("RegisterDevice", "FCM token sent to backend")
+                } catch (e: Exception) {
+                    android.util.Log.w("RegisterDevice", "Failed to send FCM token", e)
+                }
+            }
             
             Result.Success(
                 AuthResult(

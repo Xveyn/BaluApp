@@ -23,6 +23,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.local.security.AppLockManager
+import com.baluhost.android.data.notification.NotificationWebSocketManager
 import com.baluhost.android.data.notification.ServerConnectionService
 import com.baluhost.android.presentation.navigation.NavGraph
 import com.baluhost.android.presentation.navigation.Screen
@@ -45,17 +46,27 @@ class MainActivity : AppCompatActivity() {
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
+    @Inject
+    lateinit var notificationWebSocketManager: NotificationWebSocketManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // Initialize app logger
         com.baluhost.android.util.Logger.init(applicationContext)
 
-        // Start foreground notification service if user is logged in
+        // Start foreground notification service and WebSocket if user is logged in
         lifecycleScope.launch {
             val serverUrl = preferencesManager.getServerUrl().first()
             if (serverUrl != null) {
                 Log.d(TAG, "User is connected, starting ServerConnectionService")
                 ServerConnectionService.start(this@MainActivity)
+
+                // Connect notification WebSocket
+                try {
+                    notificationWebSocketManager.connect()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to connect notification WebSocket", e)
+                }
             }
         }
 
@@ -83,7 +94,21 @@ class MainActivity : AppCompatActivity() {
                                     } else {
                                         Log.d(TAG, "App lock check: no lock needed")
                                     }
+
+                                    // Reconnect WebSocket when coming back from background
+                                    val serverUrl = preferencesManager.getServerUrl().first()
+                                    if (serverUrl != null) {
+                                        try {
+                                            notificationWebSocketManager.connect()
+                                        } catch (e: Exception) {
+                                            Log.w(TAG, "WebSocket reconnect failed", e)
+                                        }
+                                    }
                                 }
+                            }
+                            if (event == Lifecycle.Event.ON_STOP) {
+                                // Disconnect WebSocket when app goes to background (FCM takes over)
+                                notificationWebSocketManager.disconnect()
                             }
                             if (event == Lifecycle.Event.ON_RESUME) {
                                 com.baluhost.android.data.worker.SyncScheduleWorkScheduler
@@ -138,7 +163,7 @@ class MainActivity : AppCompatActivity() {
             Log.d(TAG, "App moved to background, recording timestamp")
         }
     }
-    
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -167,6 +192,16 @@ class MainActivity : AppCompatActivity() {
             "device_removed" -> {
                 Log.i(TAG, "Device was removed, navigating to re-registration")
                 return Screen.QrScanner.route
+            }
+            "backend_notification" -> {
+                val actionUrl = intent.getStringExtra("action_url")
+                Log.i(TAG, "Backend notification tapped, action_url=$actionUrl")
+                return when {
+                    actionUrl?.contains("/files") == true -> Screen.Main.route
+                    actionUrl?.contains("/sync") == true -> Screen.Main.route
+                    actionUrl?.contains("/raid") == true -> Screen.Main.route
+                    else -> Screen.Notifications.route
+                }
             }
         }
 

@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.baluhost.android.data.notification.SyncNotificationReceiver
+import com.baluhost.android.util.NotificationIds
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -42,15 +43,15 @@ class SyncNotificationManager @Inject constructor(
         private const val CHANNEL_SYNC_ERROR = "sync_error"
         private const val CHANNEL_CONFLICTS = "sync_conflicts"
         
-        // Notification IDs
-        private const val NOTIFICATION_ID_SYNC_PROGRESS = 1001
-        private const val NOTIFICATION_ID_SYNC_COMPLETE = 1002
-        private const val NOTIFICATION_ID_SYNC_ERROR = 1003
-        private const val NOTIFICATION_ID_CONFLICTS = 1004
-        
+        // Notification IDs (centralized in NotificationIds)
+        private const val NOTIFICATION_ID_SYNC_PROGRESS = NotificationIds.SYNC_PROGRESS
+        private const val NOTIFICATION_ID_SYNC_COMPLETE = NotificationIds.SYNC_COMPLETE
+        private const val NOTIFICATION_ID_SYNC_ERROR = NotificationIds.SYNC_ERROR
+        private const val NOTIFICATION_ID_CONFLICTS = NotificationIds.SYNC_CONFLICTS
+
         // Server connection
         const val CHANNEL_SERVER_CONNECTION = "server_connection"
-        const val NOTIFICATION_ID_CONNECTION = 1010
+        const val NOTIFICATION_ID_CONNECTION = NotificationIds.CONNECTION
 
         // Actions
         const val ACTION_CANCEL_SYNC = "com.baluhost.android.CANCEL_SYNC"
