@@ -1,6 +1,10 @@
 package com.baluhost.android
 
 import android.app.Application
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.content.Context
+import android.os.Build
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
@@ -41,6 +45,43 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
 
         // Schedule periodic sync schedule refresh (every 30 minutes)
         SyncScheduleWorkScheduler.schedulePeriodicRefresh(this)
+
+        // Create notification channels for backend alerts
+        createNotificationChannels()
+    }
+
+    private fun createNotificationChannels() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+            val channels = listOf(
+                NotificationChannel(
+                    "alerts_critical",
+                    "Kritische Alarme",
+                    NotificationManager.IMPORTANCE_HIGH
+                ).apply {
+                    description = "Kritische Benachrichtigungen vom Server"
+                    enableVibration(true)
+                    enableLights(true)
+                },
+                NotificationChannel(
+                    "alerts_warning",
+                    "Warnungen",
+                    NotificationManager.IMPORTANCE_DEFAULT
+                ).apply {
+                    description = "Warnmeldungen vom Server"
+                },
+                NotificationChannel(
+                    "alerts_info",
+                    "Informationen",
+                    NotificationManager.IMPORTANCE_LOW
+                ).apply {
+                    description = "Informative Benachrichtigungen vom Server"
+                }
+            )
+
+            channels.forEach { manager.createNotificationChannel(it) }
+        }
     }
     
     override val workManagerConfiguration: Configuration

@@ -12,9 +12,12 @@ import com.baluhost.android.presentation.MainActivity
 import com.baluhost.android.R
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.baluhost.android.data.remote.api.MobileApi
+import com.baluhost.android.util.NotificationIds
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -37,14 +40,13 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         private const val CHANNEL_NAME_EXPIRATION = "Geräte-Autorisierung"
         private const val CHANNEL_ID_STATUS = "device_status"
         private const val CHANNEL_NAME_STATUS = "Gerätestatus"
-        
-        // Notification IDs
-        private const val NOTIFICATION_ID_EXPIRATION = 1001
-        private const val NOTIFICATION_ID_STATUS = 1002
     }
     
     @Inject
     lateinit var preferencesManager: com.baluhost.android.data.local.datastore.PreferencesManager
+
+    @Inject
+    lateinit var mobileApi: MobileApi
     
     override fun onCreate() {
         super.onCreate()
@@ -58,14 +60,20 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "New FCM token: $token")
-        
-        // Store token locally
+
         CoroutineScope(Dispatchers.IO).launch {
             preferencesManager.saveFcmToken(token)
-            
-            // TODO: Send token to backend
-            // This requires device_id which is only available after registration
-            // Token will be sent during registration or on app startup
+
+            // Send token to backend if device is registered
+            val deviceId = preferencesManager.getDeviceId().first()
+            if (!deviceId.isNullOrEmpty()) {
+                try {
+                    mobileApi.registerPushToken(deviceId, mapOf("token" to token))
+                    Log.d(TAG, "FCM token sent to backend")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to send FCM token to backend", e)
+                }
+            }
         }
     }
     
@@ -87,6 +95,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         when (notificationType) {
             "expiration_warning" -> handleExpirationWarning(data, message.notification)
             "device_removed" -> handleDeviceRemoved(data, message.notification)
+            "notification" -> handleBackendNotification(data, message.notification)
             else -> {
                 // Generic notification
                 message.notification?.let { notification ->
@@ -122,7 +131,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         
         val pendingIntent = PendingIntent.getActivity(
             this,
-            NOTIFICATION_ID_EXPIRATION,
+            NotificationIds.DEVICE_EXPIRATION,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -154,7 +163,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         
         val renewPendingIntent = PendingIntent.getActivity(
             this,
-            NOTIFICATION_ID_EXPIRATION + 1,
+            NotificationIds.DEVICE_EXPIRATION + 1,
             renewIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -167,7 +176,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         
         // Show notification
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID_EXPIRATION, notificationBuilder.build())
+        notificationManager.notify(NotificationIds.DEVICE_EXPIRATION, notificationBuilder.build())
         
         Log.d(TAG, "Expiration warning notification shown: $warningType for $deviceName")
     }
@@ -190,7 +199,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         
         val pendingIntent = PendingIntent.getActivity(
             this,
-            NOTIFICATION_ID_STATUS,
+            NotificationIds.DEVICE_STATUS,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -208,7 +217,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         
         // Show notification
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID_STATUS, notificationBuilder.build())
+        notificationManager.notify(NotificationIds.DEVICE_STATUS, notificationBuilder.build())
         
         // Clear local data (tokens, preferences)
         CoroutineScope(Dispatchers.IO).launch {
@@ -218,6 +227,56 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "Device removed notification shown: $deviceName")
     }
     
+    /**
+     * Handle backend notification (general alerts from notification system).
+     */
+    private fun handleBackendNotification(data: Map<String, String>, notification: RemoteMessage.Notification?) {
+        val notificationId = data["notification_id"]?.toIntOrNull() ?: 0
+        val priority = data["priority"]?.toIntOrNull() ?: 0
+        val actionUrl = data["action_url"]
+        val title = notification?.title ?: "BaluHost"
+        val body = notification?.body ?: ""
+
+        val channelId = when {
+            priority >= 3 -> "alerts_critical"
+            priority >= 2 -> "alerts_warning"
+            else -> "alerts_info"
+        }
+
+        val intent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("notification_type", "backend_notification")
+            putExtra("action_url", actionUrl)
+        }
+
+        val pendingIntent = PendingIntent.getActivity(
+            this,
+            NotificationIds.forNotification(notificationId),
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notificationCompat = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(when {
+                priority >= 3 -> NotificationCompat.PRIORITY_HIGH
+                priority >= 2 -> NotificationCompat.PRIORITY_DEFAULT
+                else -> NotificationCompat.PRIORITY_LOW
+            })
+            .setAutoCancel(true)
+            .setContentIntent(pendingIntent)
+            .setColor(getColor(R.color.primary))
+            .build()
+
+        val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.notify(NotificationIds.forNotification(notificationId), notificationCompat)
+
+        Log.d(TAG, "Backend notification shown: $title (priority=$priority)")
+    }
+
     /**
      * Show generic notification (fallback).
      */
@@ -229,7 +288,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         
         val pendingIntent = PendingIntent.getActivity(
             this,
-            NOTIFICATION_ID_STATUS,
+            NotificationIds.DEVICE_STATUS,
             intent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
@@ -243,7 +302,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
             .setContentIntent(pendingIntent)
         
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        notificationManager.notify(NOTIFICATION_ID_STATUS, notificationBuilder.build())
+        notificationManager.notify(NotificationIds.DEVICE_STATUS, notificationBuilder.build())
     }
     
     /**
@@ -273,9 +332,39 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
                 description = "Benachrichtigungen über Gerätestatus-Änderungen"
             }
             
+            // Alert channels for backend notifications
+            val alertsCritical = NotificationChannel(
+                "alerts_critical",
+                "Kritische Alarme",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Kritische Benachrichtigungen vom Server"
+                enableVibration(true)
+                enableLights(true)
+            }
+
+            val alertsWarning = NotificationChannel(
+                "alerts_warning",
+                "Warnungen",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Warnmeldungen vom Server"
+            }
+
+            val alertsInfo = NotificationChannel(
+                "alerts_info",
+                "Informationen",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "Informative Benachrichtigungen vom Server"
+            }
+
             notificationManager.createNotificationChannel(expirationChannel)
             notificationManager.createNotificationChannel(statusChannel)
-            
+            notificationManager.createNotificationChannel(alertsCritical)
+            notificationManager.createNotificationChannel(alertsWarning)
+            notificationManager.createNotificationChannel(alertsInfo)
+
             Log.d(TAG, "Notification channels created")
         }
     }

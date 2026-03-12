@@ -2,6 +2,7 @@ package com.baluhost.android.di
 
 import com.baluhost.android.data.repository.ActivityRepositoryImpl
 import com.baluhost.android.data.repository.AuthRepositoryImpl
+import com.baluhost.android.data.repository.NotificationRepositoryImpl
 import com.baluhost.android.data.repository.DeviceRepositoryImpl
 import com.baluhost.android.data.repository.FilesRepositoryImpl
 import com.baluhost.android.data.repository.MonitoringRepositoryImpl
@@ -10,6 +11,7 @@ import com.baluhost.android.data.repository.SyncRepositoryImpl
 import com.baluhost.android.data.repository.SystemRepositoryImpl
 import com.baluhost.android.data.repository.VpnRepositoryImpl
 import com.baluhost.android.domain.repository.ActivityRepository
+import com.baluhost.android.domain.repository.NotificationRepository
 import com.baluhost.android.domain.repository.AuthRepository
 import com.baluhost.android.domain.repository.DeviceRepository
 import com.baluhost.android.domain.repository.FilesRepository
@@ -84,4 +86,10 @@ abstract class RepositoryModule {
     abstract fun bindActivityRepository(
         activityRepositoryImpl: ActivityRepositoryImpl
     ): ActivityRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindNotificationRepository(
+        notificationRepositoryImpl: NotificationRepositoryImpl
+    ): NotificationRepository
 }

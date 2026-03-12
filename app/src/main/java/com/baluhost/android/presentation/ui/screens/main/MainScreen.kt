@@ -84,6 +84,9 @@ fun MainScreen(
                         },
                         onNavigateToSharesDetail = {
                             parentNavController.navigate(Screen.SharesDetail.route)
+                        },
+                        onNavigateToNotifications = {
+                            parentNavController.navigate(Screen.Notifications.route)
                         }
                     )
                 }
@@ -140,6 +143,9 @@ fun MainScreen(
                         onNavigateToFolderSync = {
                             // Navigate to FolderSync screen
                             parentNavController.navigate(Screen.FolderSync.route)
+                        },
+                        onNavigateToNotificationPreferences = {
+                            parentNavController.navigate(Screen.NotificationPreferences.route)
                         }
                     )
                 }

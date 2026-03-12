@@ -42,6 +42,7 @@ import com.baluhost.android.domain.model.ShareStatistics
 import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
+import com.baluhost.android.presentation.ui.components.NotificationBell
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
 import com.baluhost.android.presentation.ui.theme.*
 import kotlinx.coroutines.delay
@@ -64,9 +65,11 @@ fun DashboardScreen(
     onNavigateToPowerDetail: () -> Unit = {},
     onNavigateToStorageDetail: () -> Unit = {},
     onNavigateToSharesDetail: () -> Unit = {},
+    onNavigateToNotifications: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val unreadNotificationCount by viewModel.unreadNotificationCount.collectAsState()
 
     // Collect VPN state for banner
     val isInHomeNetwork by viewModel.isInHomeNetwork.collectAsState()
@@ -108,6 +111,12 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        // Notification bell
+                        NotificationBell(
+                            unreadCount = unreadNotificationCount,
+                            onClick = onNavigateToNotifications
+                        )
+
                         // Refresh button
                         IconButton(
                             onClick = { viewModel.refresh() },

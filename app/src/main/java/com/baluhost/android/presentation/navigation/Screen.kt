@@ -33,4 +33,6 @@ sealed class Screen(val route: String) {
     object StorageDetail : Screen("storage_detail")
     object SharesDetail : Screen("shares_detail")
     object SyncSchedule : Screen("sync_schedule")
+    object Notifications : Screen("notifications")
+    object NotificationPreferences : Screen("notification_preferences")
 }
