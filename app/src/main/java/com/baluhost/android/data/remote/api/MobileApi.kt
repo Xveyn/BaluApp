@@ -10,6 +10,7 @@ import retrofit2.http.GET
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Path
+import retrofit2.http.Query
 
 /**
  * Mobile device registration and management API endpoints.
@@ -37,6 +38,6 @@ interface MobileApi {
     @POST("mobile/devices/{deviceId}/push-token")
     suspend fun registerPushToken(
         @Path("deviceId") deviceId: String,
-        @Body request: Map<String, String>
+        @Query("push_token") pushToken: String
     ): Map<String, Any>
 }

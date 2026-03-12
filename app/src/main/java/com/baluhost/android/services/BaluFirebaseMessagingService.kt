@@ -12,6 +12,7 @@ import com.baluhost.android.presentation.MainActivity
 import com.baluhost.android.R
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import com.baluhost.android.data.notification.NotificationWebSocketManager
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.util.NotificationIds
 import dagger.hilt.android.AndroidEntryPoint
@@ -47,6 +48,9 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject
     lateinit var mobileApi: MobileApi
+
+    @Inject
+    lateinit var notificationWebSocketManager: NotificationWebSocketManager
     
     override fun onCreate() {
         super.onCreate()
@@ -68,7 +72,7 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
             val deviceId = preferencesManager.getDeviceId().first()
             if (!deviceId.isNullOrEmpty()) {
                 try {
-                    mobileApi.registerPushToken(deviceId, mapOf("token" to token))
+                    mobileApi.registerPushToken(deviceId, token)
                     Log.d(TAG, "FCM token sent to backend")
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to send FCM token to backend", e)
@@ -273,6 +277,9 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
 
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NotificationIds.forNotification(notificationId), notificationCompat)
+
+        // Update in-app badge count
+        notificationWebSocketManager.incrementUnreadCount()
 
         Log.d(TAG, "Backend notification shown: $title (priority=$priority)")
     }

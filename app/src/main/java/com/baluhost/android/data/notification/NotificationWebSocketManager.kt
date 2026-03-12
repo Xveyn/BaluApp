@@ -46,6 +46,11 @@ class NotificationWebSocketManager @Inject constructor(
     private val _latestNotification = MutableSharedFlow<NotificationDto>(extraBufferCapacity = 10)
     val latestNotification: SharedFlow<NotificationDto> = _latestNotification.asSharedFlow()
 
+    /** Increment unread count from external sources (e.g. FCM push). */
+    fun incrementUnreadCount() {
+        _unreadCount.value += 1
+    }
+
     suspend fun connect() {
         if (webSocket != null || isConnecting.get()) {
             Log.d(TAG, "Already connected or connecting, skipping")
