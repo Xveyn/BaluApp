@@ -175,15 +175,18 @@ class VpnViewModel @Inject constructor(
     
     /**
      * Check if VPN is currently active.
+     *
+     * Cannot rely on activeNetwork because our app is excluded from VPN routing
+     * (addDisallowedApplication). Instead check ALL networks for a VPN transport.
      */
+    @Suppress("DEPRECATION")
     private fun isVpnActive(): Boolean {
         return try {
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val activeNetwork = connectivityManager.activeNetwork ?: return false
-            val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-            
-            // Check if the active network is a VPN
-            networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+            connectivityManager.allNetworks.any { network ->
+                connectivityManager.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Error checking VPN status", e)
             false
@@ -286,27 +289,33 @@ class VpnViewModel @Inject constructor(
             )
             return
         }
-        
+
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
-            
+
             Log.d(TAG, "Initiating VPN connection")
             val result = connectVpnUseCase()
-            
+
             when (result) {
                 is Result.Success -> {
-                    Log.d(TAG, "VPN connection initiated successfully")
-                    // Give service time to establish connection
-                    delay(2000)
-                    
-                    // Check actual VPN status after delay
-                    val isVpnActive = isVpnActive()
-                    Log.d(TAG, "VPN active after connect: $isVpnActive")
-                    
+                    Log.d(TAG, "VPN service started, waiting for tunnel...")
+                    // Poll for VPN status — the service needs time to start,
+                    // build the TUN interface, and complete the WireGuard handshake.
+                    var connected = false
+                    for (attempt in 1..10) {
+                        delay(1000)
+                        if (isVpnActive()) {
+                            connected = true
+                            Log.d(TAG, "VPN active after ${attempt}s")
+                            break
+                        }
+                        Log.d(TAG, "VPN not active yet (attempt $attempt/10)")
+                    }
+
                     _uiState.value = _uiState.value.copy(
-                        isConnected = isVpnActive,
+                        isConnected = connected,
                         isLoading = false,
-                        error = if (!isVpnActive) "VPN konnte nicht gestartet werden" else null
+                        error = if (!connected) "VPN konnte nicht gestartet werden — prüfe Logcat" else null
                     )
                 }
                 is Result.Error -> {

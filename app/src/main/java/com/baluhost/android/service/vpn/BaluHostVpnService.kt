@@ -19,6 +19,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -28,8 +29,10 @@ import java.lang.reflect.Method
 /**
  * VPN Service using WireGuard Go library directly via VpnService.Builder.
  *
- * Bypasses GoBackend (which has Samsung VpnService.prepare() issues)
- * and calls the WireGuard Go native methods via reflection.
+ * Registers this VpnService with GoBackend's internal static reference so
+ * the native Go code can call protect() on sockets BEFORE sending packets.
+ * This prevents routing loops where handshake packets get sent through the
+ * VPN tunnel instead of the real network.
  */
 class BaluHostVpnService : VpnService() {
 
@@ -82,10 +85,63 @@ class BaluHostVpnService : VpnService() {
         return START_NOT_STICKY
     }
 
+    /**
+     * Register this VpnService with GoBackend's static vpnService field.
+     *
+     * The WireGuard Go native code calls back to GoBackend to protect UDP
+     * sockets via VpnService.protect(fd). Without this, sockets created
+     * during wgTurnOn are NOT protected and the initial handshake packets
+     * get routed back through the VPN tunnel (routing loop).
+     */
+    private fun registerWithGoBackend() {
+        try {
+            val vpnServiceField = GoBackend::class.java.getDeclaredField("vpnService")
+            vpnServiceField.isAccessible = true
+
+            // Create a fresh GhettoCompletableFuture and complete it with our service
+            val currentFuture = vpnServiceField.get(null)
+            val futureClass = currentFuture.javaClass
+
+            val constructor = futureClass.getDeclaredConstructor()
+            constructor.isAccessible = true
+            val newFuture = constructor.newInstance()
+
+            val completeMethod = futureClass.getDeclaredMethod("complete", Any::class.java)
+            completeMethod.isAccessible = true
+            completeMethod.invoke(newFuture, this)
+
+            vpnServiceField.set(null, newFuture)
+            Log.d(TAG, "Registered with GoBackend for automatic socket protection")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to register with GoBackend — sockets will be protected manually after tunnel start", e)
+        }
+    }
+
+    /**
+     * Unregister from GoBackend so it doesn't hold a reference to a destroyed service.
+     */
+    private fun unregisterFromGoBackend() {
+        try {
+            val vpnServiceField = GoBackend::class.java.getDeclaredField("vpnService")
+            vpnServiceField.isAccessible = true
+            val currentFuture = vpnServiceField.get(null)
+            val futureClass = currentFuture.javaClass
+            val constructor = futureClass.getDeclaredConstructor()
+            constructor.isAccessible = true
+            vpnServiceField.set(null, constructor.newInstance())
+            Log.d(TAG, "Unregistered from GoBackend")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister from GoBackend", e)
+        }
+    }
+
     private fun startVpn(configString: String) {
         Log.d(TAG, "Starting VPN connection")
 
         val config = Config.parse(configString.byteInputStream())
+        Log.d(TAG, "Config parsed: ${config.peers.size} peer(s), " +
+                "addresses=${config.`interface`.addresses}, " +
+                "dns=${config.`interface`.dnsServers}")
 
         // Build VPN interface
         val builder = Builder()
@@ -102,6 +158,7 @@ class BaluHostVpnService : VpnService() {
         }
 
         for (peer in config.peers) {
+            Log.d(TAG, "Peer endpoint: ${peer.endpoint.orElse(null)}")
             for (allowedIp in peer.allowedIps) {
                 Log.d(TAG, "Adding route: ${allowedIp.address}/${allowedIp.mask}")
                 builder.addRoute(allowedIp.address, allowedIp.mask)
@@ -124,7 +181,6 @@ class BaluHostVpnService : VpnService() {
             val prepareIntent = VpnService.prepare(this)
             Log.e(TAG, "establish() returned null. prepare() result: $prepareIntent")
             if (prepareIntent != null) {
-                // Permission not granted — launch consent dialog directly
                 Log.d(TAG, "Launching VPN consent dialog from service")
                 prepareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 startActivity(prepareIntent)
@@ -132,7 +188,18 @@ class BaluHostVpnService : VpnService() {
             throw IllegalStateException("Failed to establish VPN interface — permission denied?")
         }
 
-        Log.d(TAG, "VPN interface established")
+        Log.d(TAG, "VPN interface established, fd=${tun.fd}")
+
+        // Tell Android to use the current default network (WiFi/cellular) as
+        // the underlying transport for this VPN. Without this, protected sockets
+        // have no route to the endpoint — even if protect() returns true.
+        setUnderlyingNetworks(null)
+        Log.d(TAG, "Set underlying networks to system default")
+
+        // Register with GoBackend BEFORE wgTurnOn so native code can
+        // call protect() on sockets as they are created during startup.
+        // This prevents the handshake routing loop.
+        registerWithGoBackend()
 
         // Get userspace config string for WireGuard Go
         val wgConfig = config.toWgUserspaceString()
@@ -147,18 +214,32 @@ class BaluHostVpnService : VpnService() {
         tunnelHandle = handle
         Log.d(TAG, "WireGuard tunnel started, handle=$handle")
 
-        // Protect WireGuard sockets from being routed through the VPN
-        try {
-            val socketV4 = wgGetSocketV4.invoke(null, handle) as Int
-            if (socketV4 >= 0) protect(socketV4)
-            val socketV6 = wgGetSocketV6.invoke(null, handle) as Int
-            if (socketV6 >= 0) protect(socketV6)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to protect WireGuard sockets", e)
-        }
+        // Also protect sockets explicitly as a fallback
+        protectSockets(handle)
 
         Log.i(TAG, "VPN tunnel started successfully")
         updateNotification(true)
+    }
+
+    /**
+     * Explicitly protect WireGuard UDP sockets as a fallback.
+     * The primary protection happens via GoBackend registration above.
+     */
+    private fun protectSockets(handle: Int) {
+        try {
+            val socketV4 = wgGetSocketV4.invoke(null, handle) as Int
+            if (socketV4 >= 0) {
+                val ok = protect(socketV4)
+                Log.d(TAG, "Protected IPv4 socket fd=$socketV4: $ok")
+            }
+            val socketV6 = wgGetSocketV6.invoke(null, handle) as Int
+            if (socketV6 >= 0) {
+                val ok = protect(socketV6)
+                Log.d(TAG, "Protected IPv6 socket fd=$socketV6: $ok")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to protect WireGuard sockets manually", e)
+        }
     }
 
     private fun stopVpn() {
@@ -172,6 +253,7 @@ class BaluHostVpnService : VpnService() {
             Log.e(TAG, "Error stopping WireGuard tunnel", e)
         }
 
+        unregisterFromGoBackend()
         Log.i(TAG, "VPN connection stopped")
         updateNotification(false)
     }
