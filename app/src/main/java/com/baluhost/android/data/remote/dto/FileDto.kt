@@ -20,7 +20,9 @@ data class FileItemDto(
     val owner: String? = null,
     val permissions: String? = null,
     @SerializedName("mime_type")
-    val mimeType: String? = null
+    val mimeType: String? = null,
+    @SerializedName("file_id")
+    val fileId: Int? = null
 ) {
     val isDirectory: Boolean get() = type == "directory"
 }
