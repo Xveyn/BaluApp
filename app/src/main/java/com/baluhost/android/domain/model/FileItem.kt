@@ -1,5 +1,6 @@
 package com.baluhost.android.domain.model
 
+import com.baluhost.android.util.ByteFormatter
 import java.time.Instant
 
 /**
@@ -24,12 +25,5 @@ data class FileItem(
     val displaySize: String
         get() = formatFileSize(size)
     
-    private fun formatFileSize(bytes: Long): String {
-        return when {
-            bytes < 1024 -> "$bytes B"
-            bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-            bytes < 1024 * 1024 * 1024 -> "${bytes / (1024 * 1024)} MB"
-            else -> "${bytes / (1024 * 1024 * 1024)} GB"
-        }
-    }
+    private fun formatFileSize(bytes: Long): String = ByteFormatter.format(bytes)
 }

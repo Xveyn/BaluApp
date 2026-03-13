@@ -9,9 +9,17 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.worker.OfflineQueueWorkScheduler
 import com.baluhost.android.data.worker.SyncScheduleWorkScheduler
+import com.baluhost.android.util.ByteFormatter
+import com.baluhost.android.util.ByteUnitMode
 import dagger.hilt.android.HiltAndroidApp
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -32,6 +40,11 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
     
     @Inject
     lateinit var imageLoader: ImageLoader
+
+    @Inject
+    lateinit var preferencesManager: PreferencesManager
+
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     override fun onCreate() {
         super.onCreate()
@@ -48,6 +61,12 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
 
         // Create notification channels for backend alerts
         createNotificationChannels()
+
+        // Load byte unit mode preference
+        applicationScope.launch {
+            val mode = preferencesManager.getByteUnitMode().first()
+            ByteFormatter.mode = if (mode == "decimal") ByteUnitMode.DECIMAL else ByteUnitMode.BINARY
+        }
     }
 
     private fun createNotificationChannels() {

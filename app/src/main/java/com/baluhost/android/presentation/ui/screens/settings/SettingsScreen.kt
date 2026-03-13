@@ -25,6 +25,7 @@ import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.GradientButton
 import com.baluhost.android.presentation.ui.components.defaultGradient
 import com.baluhost.android.presentation.ui.components.errorGradient
+import com.baluhost.android.util.ByteUnitMode
 import com.baluhost.android.presentation.ui.screens.vpn.VpnViewModel
 import com.baluhost.android.presentation.ui.theme.*
 
@@ -208,6 +209,87 @@ fun SettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !uiState.isClearingCache && uiState.cacheFileCount > 0
                     )
+                }
+
+                // Byte Unit Mode Card
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    intensity = GlassIntensity.Medium
+                ) {
+                    Text(
+                        text = "BYTE-EINHEIT",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate500,
+                        letterSpacing = 2.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Binary option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setByteUnitMode(ByteUnitMode.BINARY) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = uiState.byteUnitMode == ByteUnitMode.BINARY,
+                            onClick = { viewModel.setByteUnitMode(ByteUnitMode.BINARY) },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = Sky400,
+                                unselectedColor = Slate400
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Binär (KiB / MiB / GiB)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "1 GiB = 1024 MiB",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate400
+                            )
+                        }
+                    }
+
+                    HorizontalDivider(color = Slate700.copy(alpha = 0.5f))
+
+                    // Decimal option
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.setByteUnitMode(ByteUnitMode.DECIMAL) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(
+                            selected = uiState.byteUnitMode == ByteUnitMode.DECIMAL,
+                            onClick = { viewModel.setByteUnitMode(ByteUnitMode.DECIMAL) },
+                            colors = RadioButtonDefaults.colors(
+                                selectedColor = Sky400,
+                                unselectedColor = Slate400
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "Dezimal (KB / MB / GB)",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "1 GB = 1000 MB",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate400
+                            )
+                        }
+                    }
                 }
 
                 // Notification Settings Card

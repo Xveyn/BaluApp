@@ -3,6 +3,8 @@ package com.baluhost.android.presentation.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.util.ByteFormatter
+import com.baluhost.android.util.ByteUnitMode
 import com.baluhost.android.data.local.security.AppLockManager
 import com.baluhost.android.data.local.security.BiometricAuthManager
 import com.baluhost.android.data.local.security.PinManager
@@ -39,6 +41,7 @@ class SettingsViewModel @Inject constructor(
         loadUserInfo()
         loadSecuritySettings()
         loadCacheStats()
+        loadByteUnitMode()
     }
     
     private fun loadUserInfo() {
@@ -231,6 +234,24 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    private fun loadByteUnitMode() {
+        viewModelScope.launch {
+            val mode = preferencesManager.getByteUnitMode().first()
+            val byteUnitMode = if (mode == "decimal") ByteUnitMode.DECIMAL else ByteUnitMode.BINARY
+            ByteFormatter.mode = byteUnitMode
+            _uiState.update { it.copy(byteUnitMode = byteUnitMode) }
+        }
+    }
+
+    fun setByteUnitMode(mode: ByteUnitMode) {
+        viewModelScope.launch {
+            ByteFormatter.mode = mode
+            val modeString = if (mode == ByteUnitMode.DECIMAL) "decimal" else "binary"
+            preferencesManager.saveByteUnitMode(modeString)
+            _uiState.update { it.copy(byteUnitMode = mode) }
+        }
+    }
+
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
     }
@@ -256,5 +277,7 @@ data class SettingsUiState(
     val cacheFileCount: Int = 0,
     val cacheOldestAgeDays: Int? = null,
     val cacheNewestAgeDays: Int? = null,
-    val isClearingCache: Boolean = false
+    val isClearingCache: Boolean = false,
+    // Byte unit mode
+    val byteUnitMode: com.baluhost.android.util.ByteUnitMode = com.baluhost.android.util.ByteUnitMode.BINARY
 )
