@@ -36,6 +36,7 @@ class PreferencesManager @Inject constructor(
     private val fcmTokenKey = stringPreferencesKey("fcm_token")
     private val deviceIdKey = stringPreferencesKey("device_id")
     private val onboardingCompletedKey = stringPreferencesKey("onboarding_completed")
+    private val byteUnitModeKey = stringPreferencesKey("byte_unit_mode")
     
     // Access Token (delegated to SecurePreferencesManager for encryption)
     suspend fun saveAccessToken(token: String) {
@@ -139,6 +140,15 @@ class PreferencesManager @Inject constructor(
         }
     }
     
+    // Byte Unit Mode (binary / decimal)
+    suspend fun saveByteUnitMode(mode: String) {
+        dataStore.edit { prefs -> prefs[byteUnitModeKey] = mode }
+    }
+
+    fun getByteUnitMode(): Flow<String> {
+        return dataStore.data.map { prefs -> prefs[byteUnitModeKey] ?: "binary" }
+    }
+
     // Sync Folder URIs (stored as JSON string map: folderId -> URI string)
     suspend fun saveSyncFolderUri(folderId: String, uri: String) {
         dataStore.edit { prefs ->

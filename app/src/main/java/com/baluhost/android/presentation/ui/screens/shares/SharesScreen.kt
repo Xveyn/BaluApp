@@ -751,14 +751,7 @@ private fun PermissionToggle(
     }
 }
 
-private fun formatFileSize(bytes: Long): String {
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> "${bytes / 1024} KB"
-        bytes < 1024 * 1024 * 1024 -> String.format("%.1f MB", bytes / (1024.0 * 1024.0))
-        else -> String.format("%.1f GB", bytes / (1024.0 * 1024.0 * 1024.0))
-    }
-}
+private fun formatFileSize(bytes: Long): String = com.baluhost.android.util.ByteFormatter.format(bytes)
 
 @Composable
 private fun SharedWithMeTab(shares: List<SharedWithMeInfo>) {
