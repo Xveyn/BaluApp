@@ -565,6 +565,18 @@ class FilesViewModel @Inject constructor(
         }
     }
     
+    fun trackFileOpen(file: FileItem) {
+        viewModelScope.launch {
+            trackFileActivityUseCase(
+                action = com.baluhost.android.domain.model.FileAction.OPEN,
+                filePath = file.path,
+                fileName = file.name,
+                fileSize = file.size,
+                mimeType = file.mimeType
+            )
+        }
+    }
+
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
     }

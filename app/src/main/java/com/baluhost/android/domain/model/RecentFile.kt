@@ -17,13 +17,7 @@ data class RecentFile(
         get() = if (isDirectory) "" else fileName.substringAfterLast('.', "")
 
     val displaySize: String
-        get() = when {
-            fileSize == null -> ""
-            fileSize < 1024 -> "$fileSize B"
-            fileSize < 1024 * 1024 -> "${fileSize / 1024} KB"
-            fileSize < 1024 * 1024 * 1024 -> "${fileSize / (1024 * 1024)} MB"
-            else -> "${fileSize / (1024 * 1024 * 1024)} GB"
-        }
+        get() = if (fileSize != null) com.baluhost.android.util.ByteFormatter.format(fileSize) else ""
 }
 
 /**

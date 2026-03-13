@@ -396,6 +396,7 @@ fun FilesScreen(
                                                         file.mimeType?.startsWith("image/") == true ||
                                                         file.mimeType?.startsWith("video/") == true ||
                                                         file.mimeType?.startsWith("audio/") == true -> {
+                                                            viewModel.trackFileOpen(file)
                                                             floatingPreviewUrl = viewModel.getFileDownloadUrl(file.path)
                                                         }
                                                         else -> {}
