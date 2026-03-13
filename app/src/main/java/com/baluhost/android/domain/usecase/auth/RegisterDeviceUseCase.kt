@@ -41,13 +41,20 @@ class RegisterDeviceUseCase @Inject constructor(
             android.util.Log.d("RegisterDevice", "Using server URL: $serverUrl")
             android.util.Log.d("RegisterDevice", "Final base URL: $finalUrl")
             
+            // Variable to hold the access token once registration succeeds
+            var accessToken: String? = null
+
             val okHttpClient = okhttp3.OkHttpClient.Builder()
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .addInterceptor { chain ->
-                    val request = chain.request()
-                    android.util.Log.d("RegisterDevice", "Request URL: ${request.url}")
-                    chain.proceed(request)
+                    val requestBuilder = chain.request().newBuilder()
+                    android.util.Log.d("RegisterDevice", "Request URL: ${chain.request().url}")
+                    // Add auth header for post-registration calls (e.g., push-token)
+                    accessToken?.let {
+                        requestBuilder.header("Authorization", "Bearer $it")
+                    }
+                    chain.proceed(requestBuilder.build())
                 }
                 .build()
             
@@ -83,6 +90,9 @@ class RegisterDeviceUseCase @Inject constructor(
             preferencesManager.saveUserRole(response.user.role)
             preferencesManager.saveDeviceId(response.device.id)  // Already a String (UUID)
             preferencesManager.saveVpnDeviceName(response.device.deviceName)
+
+            // Set token so the interceptor attaches it to subsequent requests
+            accessToken = response.accessToken
 
             // Send stored FCM token to backend
             val fcmToken = preferencesManager.getFcmToken().first()
