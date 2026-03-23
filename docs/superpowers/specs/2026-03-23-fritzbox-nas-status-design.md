@@ -44,15 +44,17 @@ Content-Type: text/xml; charset="utf-8"
 SOAPAction: "urn:dslforum-org:service:Hosts:1#GetSpecificHostEntry"
 ```
 
-**Return type:**
+**Return type:** Reuses existing `WolResult` sealed class (Success = active, AuthError/Unreachable/Error map to their existing semantics). The method returns a Boolean-like result parsed from `NewActive`:
+
 ```kotlin
-sealed class HostStatus {
-    object Active : HostStatus()
-    object Inactive : HostStatus()
-    object Unreachable : HostStatus()
-    data class Error(val message: String) : HostStatus()
-}
+suspend fun checkHostActive(host, port, username, password, macAddress): WolResult
+// WolResult.Success → host is active (NewActive=1)
+// WolResult.Error("inactive") → host is inactive (NewActive=0)
+// WolResult.AuthError → 401
+// WolResult.Unreachable → IOException
 ```
+
+This avoids introducing a redundant sealed class alongside `WolResult`.
 
 ### 2. PowerRepository — new `checkNasStatus()` method
 
@@ -62,15 +64,17 @@ Loads Fritz!Box config from `PreferencesManager`, calls `checkHostActive`, maps 
 suspend fun checkNasStatus(): NasStatus
 ```
 
-**NasStatus enum:**
+**NasStatus enum** (in `domain/model/NasStatus.kt`):
 ```kotlin
 enum class NasStatus { ONLINE, SLEEPING, OFFLINE, UNKNOWN }
 ```
 
 - Fritz!Box not configured → `UNKNOWN`
-- `HostStatus.Active` → `ONLINE`
-- `HostStatus.Inactive` → `SLEEPING`
-- `HostStatus.Unreachable` / `HostStatus.Error` → `OFFLINE`
+- `WolResult.Success` → `ONLINE`
+- `WolResult.Error("inactive")` → `SLEEPING`
+- `WolResult.AuthError` / `WolResult.Unreachable` / other `WolResult.Error` → `OFFLINE`
+
+**Note:** `SLEEPING` is a best-effort inference — "the NAS is not visible on the Fritz!Box network, assumed to be in sleep/off state." The Fritz!Box cannot distinguish between sleeping, powered off, or unplugged. This is acceptable for the WoL use case since WoL works in all these cases (if hardware supports it).
 
 ### 3. DashboardViewModel — Fallback Logic
 
@@ -91,7 +95,20 @@ Telemetry request
 
 New state: `_nasStatus: MutableStateFlow<NasStatus>` replaces the implicit `isOnline` derived from `uiState.telemetry != null`.
 
-### 4. ServerStatusStrip — Three States
+**This fallback logic applies to both `loadDashboardData()` and `loadTelemetryData()`** (the 30-second polling loop). Extract the fallback into a shared private method like `updateNasStatus()` called from both paths.
+
+**Remove** `_isFritzBoxConfigured` StateFlow and its collection in `loadUserRole()`. Remove corresponding `collectAsState()` in `DashboardScreen.kt`. The Fritz!Box config check is now internal to the fallback logic.
+
+### 4. Post-WoL Behavior
+
+After a successful WoL send:
+1. Set `nasStatus = NasStatus.UNKNOWN` immediately — this shows "Server Offline" (neutral) instead of the WoL button, preventing repeated taps
+2. The existing 30-second telemetry poll will naturally detect the NAS coming online
+3. The snackbar "WoL-Signal gesendet" already provides user feedback
+
+No special "STARTING" state needed — the NAS boot takes 30-90 seconds, and the telemetry poll will pick it up. Showing "Server Offline" during boot is accurate (it IS offline until it finishes booting).
+
+### 5. ServerStatusStrip — Three States
 
 | NasStatus | Dot Color | Text | Power Options (admin) |
 |-----------|-----------|------|-----------------------|
@@ -100,14 +117,14 @@ New state: `_nasStatus: MutableStateFlow<NasStatus>` replaces the implicit `isOn
 | OFFLINE | Red | "Server Offline" | — |
 | UNKNOWN | Red | "Server Offline" | — (same as OFFLINE) |
 
-The `isOnline` parameter is replaced by `nasStatus: NasStatus`. The `isFritzBoxConfigured` parameter is no longer needed (WoL availability is implicit in SLEEPING state).
+The `isOnline` parameter is replaced by `nasStatus: NasStatus`. The `isFritzBoxConfigured` parameter is removed (WoL availability is implicit in SLEEPING state).
 
 ---
 
 ## Data Flow
 
 ```
-Dashboard opens
+Dashboard opens / 30s poll
   → getSystemTelemetry() (existing periodic call)
     → Success: nasStatus = ONLINE, show telemetry
     → Failure:
@@ -117,6 +134,11 @@ Dashboard opens
                 → ONLINE: green dot, "Server Online" (API issue)
                 → OFFLINE: red dot, "Server Offline"
             → No: red dot, "Server Offline"
+
+User taps WoL
+  → sendWol() → success snackbar
+  → nasStatus = UNKNOWN (hides WoL button)
+  → Next 30s poll picks up NAS coming online
 ```
 
 ## Error Handling
@@ -124,32 +146,33 @@ Dashboard opens
 | Error | Behavior |
 |-------|----------|
 | Fritz!Box unreachable | Fall back to OFFLINE status |
-| Fritz!Box auth failure | Fall back to OFFLINE status, log warning |
+| Fritz!Box auth failure (401) | Fall back to OFFLINE status, log warning |
 | SOAP fault | Fall back to OFFLINE status |
 | MAC not found on Fritz!Box | Fall back to OFFLINE status |
 
 No user-facing errors for status checks — they silently degrade to OFFLINE.
 
-## Bugfix: Snackbar in FritzBoxSettingsViewModel
+## Bugfix: SharedFlow buffer
 
 **Problem:** `MutableSharedFlow<String>()` with default `extraBufferCapacity = 0` drops events when the collector is busy (e.g., showing a previous snackbar).
 
-**Fix:** Change to `MutableSharedFlow<String>(extraBufferCapacity = 1)` so events are buffered and not lost.
+**Fix:** Change to `MutableSharedFlow<String>(extraBufferCapacity = 1)` in both:
+- `FritzBoxSettingsViewModel.kt`
+- `DashboardViewModel.kt`
 
 ## Changes to Existing Code
 
 | File | Change |
 |------|--------|
-| `FritzBoxTR064Client.kt` | Add `checkHostActive()` method and `HostStatus` sealed class |
+| `FritzBoxTR064Client.kt` | Add `checkHostActive()` method (reuses `WolResult`) |
 | `PowerRepository.kt` | Add `checkNasStatus(): NasStatus` to interface |
 | `PowerRepositoryImpl.kt` | Implement `checkNasStatus()` |
-| `DashboardViewModel.kt` | Add `nasStatus` StateFlow, fallback logic on telemetry failure |
-| `DashboardScreen.kt` | Replace `isOnline`/`isFritzBoxConfigured` with `nasStatus` in ServerStatusStrip |
+| `DashboardViewModel.kt` | Add `nasStatus` StateFlow, fallback logic in both `loadDashboardData()` and `loadTelemetryData()`, remove `_isFritzBoxConfigured`, fix SharedFlow buffer |
+| `DashboardScreen.kt` | Replace `isOnline`/`isFritzBoxConfigured` with `nasStatus` in ServerStatusStrip, remove `isFritzBoxConfigured` collection |
 | `FritzBoxSettingsViewModel.kt` | Fix SharedFlow buffer |
 
-## New Types
+## New Files
 
-| Type | Location |
-|------|----------|
-| `HostStatus` sealed class | `FritzBoxTR064Client.kt` |
-| `NasStatus` enum | `PowerRepository.kt` (or own file) |
+| File | Purpose |
+|------|---------|
+| `domain/model/NasStatus.kt` | `NasStatus` enum |
