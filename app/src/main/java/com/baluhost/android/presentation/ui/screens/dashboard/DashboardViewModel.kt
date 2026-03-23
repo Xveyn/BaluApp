@@ -24,11 +24,17 @@ import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
 import com.baluhost.android.domain.usecase.shares.GetShareStatisticsUseCase
 import com.baluhost.android.domain.usecase.system.GetSmartStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
+import com.baluhost.android.domain.usecase.power.SendWolUseCase
+import com.baluhost.android.domain.usecase.power.SendSoftSleepUseCase
+import com.baluhost.android.domain.usecase.power.SendSuspendUseCase
 import com.baluhost.android.util.NetworkStateManager
 import com.baluhost.android.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
@@ -52,7 +58,10 @@ class DashboardViewModel @Inject constructor(
     private val networkStateManager: NetworkStateManager,
     private val offlineQueueRepository: OfflineQueueRepository,
     private val syncRepository: SyncRepository,
-    private val notificationWebSocketManager: NotificationWebSocketManager
+    private val notificationWebSocketManager: NotificationWebSocketManager,
+    private val sendWolUseCase: SendWolUseCase,
+    private val sendSoftSleepUseCase: SendSoftSleepUseCase,
+    private val sendSuspendUseCase: SendSuspendUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -72,7 +81,16 @@ class DashboardViewModel @Inject constructor(
     
     private val _isVpnActive = MutableStateFlow(false)
     val isVpnActive: StateFlow<Boolean> = _isVpnActive.asStateFlow()
-    
+
+    private val _isAdmin = MutableStateFlow(false)
+    val isAdmin: StateFlow<Boolean> = _isAdmin.asStateFlow()
+
+    private val _powerActionInProgress = MutableStateFlow(false)
+    val powerActionInProgress: StateFlow<Boolean> = _powerActionInProgress.asStateFlow()
+
+    private val _snackbarEvent = MutableSharedFlow<String>()
+    val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
+
     private var pollingJob: kotlinx.coroutines.Job? = null
     
     init {
@@ -80,6 +98,7 @@ class DashboardViewModel @Inject constructor(
         startPolling()
         observeHomeNetworkState()
         checkVpnConfig()
+        loadUserRole()
         observePendingOperations()
     }
     
@@ -323,6 +342,49 @@ class DashboardViewModel @Inject constructor(
             } catch (e: Exception) {
                 Log.e("DashboardViewModel", "Failed to load sync folders", e)
             }
+        }
+    }
+
+    private fun loadUserRole() {
+        viewModelScope.launch {
+            val role = preferencesManager.getUserRole().first() ?: "user"
+            _isAdmin.value = role == "admin"
+        }
+    }
+
+    fun sendWol() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = sendWolUseCase()) {
+                is Result.Success -> _snackbarEvent.emit("WoL-Signal gesendet")
+                is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "WoL fehlgeschlagen")
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    fun sendSoftSleep() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = sendSoftSleepUseCase()) {
+                is Result.Success -> _snackbarEvent.emit("Sleep-Modus aktiviert")
+                is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Sleep fehlgeschlagen")
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    fun sendSuspend() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = sendSuspendUseCase()) {
+                is Result.Success -> _snackbarEvent.emit("System wird suspendiert")
+                is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Suspend fehlgeschlagen")
+                else -> {}
+            }
+            _powerActionInProgress.value = false
         }
     }
 
