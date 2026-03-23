@@ -76,6 +76,16 @@ fun DashboardScreen(
     val hasVpnConfig by viewModel.hasVpnConfig.collectAsState()
     val vpnBannerDismissed by viewModel.vpnBannerDismissed.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
+    val isAdmin by viewModel.isAdmin.collectAsState()
+    val powerActionInProgress by viewModel.powerActionInProgress.collectAsState()
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        viewModel.snackbarEvent.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
 
     // Card activation state for tap-to-glow-then-navigate
     var activatedCard by remember { mutableStateOf<String?>(null) }
@@ -89,6 +99,16 @@ fun DashboardScreen(
     }
     
     Scaffold(
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = Slate800,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(12.dp)
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -207,7 +227,12 @@ fun DashboardScreen(
                     // Server Status Strip
                     ServerStatusStrip(
                         isOnline = uiState.telemetry != null,
-                        uptimeSeconds = uiState.telemetry?.uptime?.toLong()
+                        uptimeSeconds = uiState.telemetry?.uptime?.toLong(),
+                        isAdmin = isAdmin,
+                        isActionInProgress = powerActionInProgress,
+                        onSendWol = { viewModel.sendWol() },
+                        onSendSoftSleep = { viewModel.sendSoftSleep() },
+                        onSendSuspend = { viewModel.sendSuspend() }
                     )
 
                     // System Metrics Grid - 2x2 layout like webapp
@@ -799,9 +824,15 @@ private fun formatRelativeTime(epochSeconds: Long): String {
 @Composable
 private fun ServerStatusStrip(
     isOnline: Boolean,
-    uptimeSeconds: Long?
+    uptimeSeconds: Long?,
+    isAdmin: Boolean,
+    isActionInProgress: Boolean,
+    onSendWol: () -> Unit,
+    onSendSoftSleep: () -> Unit,
+    onSendSuspend: () -> Unit
 ) {
     var showPowerDialog by remember { mutableStateOf(false) }
+    var confirmAction by remember { mutableStateOf<PowerAction?>(null) }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -842,26 +873,38 @@ private fun ServerStatusStrip(
                     )
                 }
             }
-            IconButton(
-                onClick = { showPowerDialog = true },
-                modifier = Modifier.size(32.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.PowerSettingsNew,
-                    contentDescription = "Power settings",
-                    tint = Slate400,
-                    modifier = Modifier.size(20.dp)
-                )
+            if (isAdmin) {
+                IconButton(
+                    onClick = { showPowerDialog = true },
+                    modifier = Modifier.size(32.dp),
+                    enabled = !isActionInProgress
+                ) {
+                    if (isActionInProgress) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = Sky400,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Icon(
+                            imageVector = Icons.Default.PowerSettingsNew,
+                            contentDescription = "Power settings",
+                            tint = Slate400,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
             }
         }
     }
 
+    // Power options dialog
     if (showPowerDialog) {
         AlertDialog(
             onDismissRequest = { showPowerDialog = false },
             confirmButton = {
                 TextButton(onClick = { showPowerDialog = false }) {
-                    Text("OK", color = Sky400)
+                    Text("Schließen", color = Slate400)
                 }
             },
             title = {
@@ -872,14 +915,143 @@ private fun ServerStatusStrip(
                 )
             },
             text = {
-                Text(
-                    "Stromverwaltung wird in einem zukünftigen Update verfügbar.",
-                    color = Slate400
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (!isOnline) {
+                        PowerOptionButton(
+                            icon = Icons.Default.WbSunny,
+                            label = "NAS aufwecken",
+                            description = "Wake-on-LAN über Fritz!Box",
+                            color = Green500,
+                            onClick = {
+                                showPowerDialog = false
+                                confirmAction = PowerAction.WOL
+                            }
+                        )
+                    } else {
+                        PowerOptionButton(
+                            icon = Icons.Default.Bedtime,
+                            label = "Soft Sleep",
+                            description = "Services pausieren, Disks herunterfahren",
+                            color = Sky400,
+                            onClick = {
+                                showPowerDialog = false
+                                confirmAction = PowerAction.SOFT_SLEEP
+                            }
+                        )
+                        PowerOptionButton(
+                            icon = Icons.Default.PowerSettingsNew,
+                            label = "Suspend",
+                            description = "System komplett schlafen legen",
+                            color = Orange500,
+                            onClick = {
+                                showPowerDialog = false
+                                confirmAction = PowerAction.SUSPEND
+                            }
+                        )
+                    }
+                }
             },
             containerColor = Slate900,
             shape = RoundedCornerShape(16.dp)
         )
+    }
+
+    // Confirmation dialog
+    confirmAction?.let { action ->
+        AlertDialog(
+            onDismissRequest = { confirmAction = null },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmAction = null
+                    when (action) {
+                        PowerAction.WOL -> onSendWol()
+                        PowerAction.SOFT_SLEEP -> onSendSoftSleep()
+                        PowerAction.SUSPEND -> onSendSuspend()
+                    }
+                }) {
+                    Text("Bestätigen", color = action.color)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmAction = null }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            },
+            title = {
+                Text(action.title, color = Color.White, fontWeight = FontWeight.SemiBold)
+            },
+            text = {
+                Text(action.confirmMessage, color = Slate400)
+            },
+            containerColor = Slate900,
+            shape = RoundedCornerShape(16.dp)
+        )
+    }
+}
+
+private enum class PowerAction(
+    val title: String,
+    val confirmMessage: String,
+    val color: Color
+) {
+    WOL(
+        title = "NAS aufwecken",
+        confirmMessage = "NAS über Fritz!Box aufwecken?",
+        color = Green500
+    ),
+    SOFT_SLEEP(
+        title = "Soft Sleep",
+        confirmMessage = "NAS in den Soft-Sleep versetzen?\n\nServices werden pausiert und Disks heruntergefahren.",
+        color = Sky400
+    ),
+    SUSPEND(
+        title = "Suspend",
+        confirmMessage = "NAS komplett suspendieren?\n\nDas System wird in den Schlafmodus versetzt.",
+        color = Orange500
+    )
+}
+
+@Composable
+private fun PowerOptionButton(
+    icon: ImageVector,
+    label: String,
+    description: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.1f),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(24.dp)
+            )
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = Color.White
+                )
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Slate400
+                )
+            }
+        }
     }
 }
 
