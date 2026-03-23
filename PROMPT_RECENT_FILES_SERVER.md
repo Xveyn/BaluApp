@@ -14,7 +14,71 @@ Das System ist **server-dominant**: Der Server ist die primäre Quelle der Wahrh
 
 - Der Server sieht **alle** Datei-Operationen — auch die über SMB, WebDAV, andere Clients
 - Der Server ist immer verfügbar (im Gegensatz zum Smartphone)
-- Cross-Device: Alle Geräte sehen dieselbe Activity-History
+- Cros  ## Task: Fritz!Box Wake-on-LAN in BaluApp einbauen
+  ### Kontext
+
+  BaluApp ist eine Android-App (Kotlin) die mit dem BaluHost NAS-Backend kommuniziert.
+  Das Backend hat zwei WoL-Endpunkte — für die App ist der dedizierte Fritz!Box-Endpunkt relevant:
+
+  ### API-Endpunkte
+
+  **1. Fritz!Box WoL (bevorzugt für Remote-WoL über VPN):**
+  POST /api/fritzbox/wol
+  Auth: Bearer  (Admin only)
+  Body: keiner
+  Response 200: { "success": true, "message": "WoL sent via Fritz!Box" }
+  Error 400: Fritz!Box nicht enabled oder keine MAC konfiguriert
+  Error 503: Fritz!Box WoL fehlgeschlagen (Verbindung/Credentials)
+
+  **2. Generischer WoL mit method-Parameter (Alternative):**
+  POST /api/system/sleep/wol
+  Auth: Bearer  (Admin only)
+  Body (optional): {
+  "mac_address": "AA:BB:CC:DD:EE:FF",  // optional, nutzt config wenn leer
+  "broadcast_address": "255.255.255.255", // optional
+  "method": "fritzbox"  // "local" oder "fritzbox"
+  }
+  Response 200: { "success": true, "message": "WoL packet sent" }
+  Error 400: Kein MAC konfiguriert
+
+  ### Anforderungen
+
+    1. **WoL-Button** in der App einbauen (sinnvoller Ort: Server-/NAS-Status-Screen oder Dashboard)
+    2. **Nur für Admins** sichtbar (die App kennt die User-Rolle aus dem JWT)
+    3. **Ablauf:**
+        - Button "NAS aufwecken" oder "Wake NAS"
+        - Confirmation-Dialog: "NAS über Fritz!Box aufwecken?"
+        - API-Call `POST /api/fritzbox/wol`
+        - Erfolg: Toast/Snackbar "WoL gesendet"
+        - Fehler: Fehlermeldung anzeigen (400 → "Fritz!Box nicht konfiguriert", 503 → "Fritz!Box nicht erreichbar")
+    4. **Fritz!Box-Config Check** (optional): `GET /api/fritzbox/config` aufrufen um zu prüfen ob Fritz!Box WoL überhaupt konfiguriert und enabled ist — wenn nicht, Button ausgrauen oder Info anzeigen
+    5. **Offline/VPN-Hinweis** (nice to have): Wenn der Server nicht erreichbar ist, Hinweis dass VPN aktiv sein muss
+
+  ### API Response Schemas
+
+  ```kotlin
+  // GET /api/fritzbox/config
+  data class FritzBoxConfig(
+      val host: String,
+      val port: Int,
+      val username: String,
+      val nas_mac_address: String?,
+      val enabled: Boolean,
+      val has_password: Boolean
+  )
+
+  // POST /api/fritzbox/wol
+  data class FritzBoxWolResponse(
+      val success: Boolean,
+      val message: String
+  )
+
+  Hinweise
+
+  - Die App nutzt bereits JWT-Auth mit Bearer Token für alle API-Calls
+  - Bestehende API-Client-Patterns und Netzwerk-Layer der App wiederverwenden
+  - Fehlerbehandlung analog zu bestehenden API-Calls in der App
+  - i18n: Deutsche und Englische Stringss-Device: Alle Geräte sehen dieselbe Activity-History
 - Kein Datenverlust wenn ein Client offline war
 
 ### Wie funktioniert die Synchronisation?
