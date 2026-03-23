@@ -25,7 +25,7 @@ class FritzBoxSettingsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(FritzBoxSettingsUiState())
     val uiState: StateFlow<FritzBoxSettingsUiState> = _uiState.asStateFlow()
 
-    private val _snackbarEvent = MutableSharedFlow<String>()
+    private val _snackbarEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
 
     init {
