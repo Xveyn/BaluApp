@@ -146,6 +146,9 @@ fun MainScreen(
                         },
                         onNavigateToNotificationPreferences = {
                             parentNavController.navigate(Screen.NotificationPreferences.route)
+                        },
+                        onNavigateToFritzBox = {
+                            parentNavController.navigate(Screen.FritzBoxSettings.route)
                         }
                     )
                 }

@@ -36,6 +36,9 @@ class SettingsViewModel @Inject constructor(
     
     private val _uiState = MutableStateFlow(SettingsUiState())
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
+
+    private val _isAdmin = MutableStateFlow(false)
+    val isAdmin: StateFlow<Boolean> = _isAdmin.asStateFlow()
     
     init {
         loadUserInfo()
@@ -57,9 +60,11 @@ class SettingsViewModel @Inject constructor(
                     deviceId = deviceId
                 )
             }
+            val role = preferencesManager.getUserRole().first() ?: "user"
+            _isAdmin.value = role == "admin"
         }
     }
-    
+
     private fun loadSecuritySettings() {
         viewModelScope.launch {
             val biometricStatus = biometricAuthManager.checkBiometricAvailability(allowDeviceCredential = false)

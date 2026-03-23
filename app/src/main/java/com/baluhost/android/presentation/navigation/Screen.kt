@@ -35,4 +35,5 @@ sealed class Screen(val route: String) {
     object SyncSchedule : Screen("sync_schedule")
     object Notifications : Screen("notifications")
     object NotificationPreferences : Screen("notification_preferences")
+    object FritzBoxSettings : Screen("fritzbox_settings")
 }
