@@ -44,6 +44,7 @@ import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.NotificationBell
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
+import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.presentation.ui.theme.*
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -78,7 +79,7 @@ fun DashboardScreen(
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
     val powerActionInProgress by viewModel.powerActionInProgress.collectAsState()
-    val isFritzBoxConfigured by viewModel.isFritzBoxConfigured.collectAsState()
+    val nasStatus by viewModel.nasStatus.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -227,11 +228,10 @@ fun DashboardScreen(
 
                     // Server Status Strip
                     ServerStatusStrip(
-                        isOnline = uiState.telemetry != null,
+                        nasStatus = nasStatus,
                         uptimeSeconds = uiState.telemetry?.uptime?.toLong(),
                         isAdmin = isAdmin,
                         isActionInProgress = powerActionInProgress,
-                        isFritzBoxConfigured = isFritzBoxConfigured,
                         onSendWol = { viewModel.sendWol() },
                         onSendSoftSleep = { viewModel.sendSoftSleep() },
                         onSendSuspend = { viewModel.sendSuspend() }
@@ -825,11 +825,10 @@ private fun formatRelativeTime(epochSeconds: Long): String {
 
 @Composable
 private fun ServerStatusStrip(
-    isOnline: Boolean,
+    nasStatus: NasStatus,
     uptimeSeconds: Long?,
     isAdmin: Boolean,
     isActionInProgress: Boolean,
-    isFritzBoxConfigured: Boolean = false,
     onSendWol: () -> Unit,
     onSendSoftSleep: () -> Unit,
     onSendSuspend: () -> Unit
@@ -858,17 +857,25 @@ private fun ServerStatusStrip(
                     modifier = Modifier
                         .size(10.dp)
                         .background(
-                            if (isOnline) Green500 else Red500,
+                            when (nasStatus) {
+                                NasStatus.ONLINE -> Green500
+                                NasStatus.SLEEPING -> Orange500
+                                else -> Red500
+                            },
                             CircleShape
                         )
                 )
                 Text(
-                    text = if (isOnline) "Server Online" else "Server Offline",
+                    text = when (nasStatus) {
+                        NasStatus.ONLINE -> "Server Online"
+                        NasStatus.SLEEPING -> "NAS schläft"
+                        else -> "Server Offline"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Medium,
                     color = Color.White
                 )
-                if (isOnline && uptimeSeconds != null) {
+                if (nasStatus == NasStatus.ONLINE && uptimeSeconds != null) {
                     Text(
                         text = formatUptimeCompact(uptimeSeconds),
                         style = MaterialTheme.typography.bodySmall,
@@ -919,8 +926,8 @@ private fun ServerStatusStrip(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    if (!isOnline) {
-                        if (isFritzBoxConfigured) {
+                    when (nasStatus) {
+                        NasStatus.SLEEPING -> {
                             PowerOptionButton(
                                 icon = Icons.Default.WbSunny,
                                 label = "NAS aufwecken",
@@ -931,34 +938,36 @@ private fun ServerStatusStrip(
                                     confirmAction = PowerAction.WOL
                                 }
                             )
-                        } else {
+                        }
+                        NasStatus.ONLINE -> {
+                            PowerOptionButton(
+                                icon = Icons.Default.Bedtime,
+                                label = "Soft Sleep",
+                                description = "Services pausieren, Disks herunterfahren",
+                                color = Sky400,
+                                onClick = {
+                                    showPowerDialog = false
+                                    confirmAction = PowerAction.SOFT_SLEEP
+                                }
+                            )
+                            PowerOptionButton(
+                                icon = Icons.Default.PowerSettingsNew,
+                                label = "Suspend",
+                                description = "System komplett schlafen legen",
+                                color = Orange500,
+                                onClick = {
+                                    showPowerDialog = false
+                                    confirmAction = PowerAction.SUSPEND
+                                }
+                            )
+                        }
+                        else -> {
                             Text(
-                                text = "Fritz!Box in Einstellungen konfigurieren, um WoL zu nutzen.",
+                                text = "Server nicht erreichbar",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = Slate400
                             )
                         }
-                    } else {
-                        PowerOptionButton(
-                            icon = Icons.Default.Bedtime,
-                            label = "Soft Sleep",
-                            description = "Services pausieren, Disks herunterfahren",
-                            color = Sky400,
-                            onClick = {
-                                showPowerDialog = false
-                                confirmAction = PowerAction.SOFT_SLEEP
-                            }
-                        )
-                        PowerOptionButton(
-                            icon = Icons.Default.PowerSettingsNew,
-                            label = "Suspend",
-                            description = "System komplett schlafen legen",
-                            color = Orange500,
-                            onClick = {
-                                showPowerDialog = false
-                                confirmAction = PowerAction.SUSPEND
-                            }
-                        )
                     }
                 }
             },
