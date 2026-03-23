@@ -24,6 +24,8 @@ import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
 import com.baluhost.android.domain.usecase.shares.GetShareStatisticsUseCase
 import com.baluhost.android.domain.usecase.system.GetSmartStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
+import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
 import com.baluhost.android.domain.usecase.power.SendWolUseCase
 import com.baluhost.android.domain.usecase.power.SendSoftSleepUseCase
 import com.baluhost.android.domain.usecase.power.SendSuspendUseCase
@@ -61,7 +63,8 @@ class DashboardViewModel @Inject constructor(
     private val notificationWebSocketManager: NotificationWebSocketManager,
     private val sendWolUseCase: SendWolUseCase,
     private val sendSoftSleepUseCase: SendSoftSleepUseCase,
-    private val sendSuspendUseCase: SendSuspendUseCase
+    private val sendSuspendUseCase: SendSuspendUseCase,
+    private val checkNasStatusUseCase: CheckNasStatusUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -85,8 +88,8 @@ class DashboardViewModel @Inject constructor(
     private val _isAdmin = MutableStateFlow(false)
     val isAdmin: StateFlow<Boolean> = _isAdmin.asStateFlow()
 
-    private val _isFritzBoxConfigured = MutableStateFlow(false)
-    val isFritzBoxConfigured: StateFlow<Boolean> = _isFritzBoxConfigured.asStateFlow()
+    private val _nasStatus = MutableStateFlow(NasStatus.UNKNOWN)
+    val nasStatus: StateFlow<NasStatus> = _nasStatus.asStateFlow()
 
     private val _powerActionInProgress = MutableStateFlow(false)
     val powerActionInProgress: StateFlow<Boolean> = _powerActionInProgress.asStateFlow()
@@ -234,12 +237,14 @@ class DashboardViewModel @Inject constructor(
                     error = null
                 )
 
+                updateNasStatus(telemetry != null)
                 loadSyncFolders()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     error = "Daten konnten nicht geladen werden: ${e.message}"
                 )
+                updateNasStatus(false)
             }
         }
     }
@@ -290,8 +295,10 @@ class DashboardViewModel @Inject constructor(
                     smartDevices = smartDevices,
                     shareStats = shareStats
                 )
+                updateNasStatus(telemetry != null)
             } catch (e: Exception) {
                 Log.e("DashboardViewModel", "Failed to poll telemetry", e)
+                updateNasStatus(false)
             }
         }
     }
@@ -353,10 +360,14 @@ class DashboardViewModel @Inject constructor(
             val role = preferencesManager.getUserRole().first() ?: "user"
             _isAdmin.value = role == "admin"
         }
-        viewModelScope.launch {
-            preferencesManager.isFritzBoxConfigured().collectLatest { configured ->
-                _isFritzBoxConfigured.value = configured
-            }
+    }
+
+    private suspend fun updateNasStatus(telemetrySuccess: Boolean) {
+        if (telemetrySuccess) {
+            _nasStatus.value = NasStatus.ONLINE
+        } else {
+            val status = checkNasStatusUseCase()
+            _nasStatus.value = status
         }
     }
 
@@ -369,6 +380,7 @@ class DashboardViewModel @Inject constructor(
                 else -> {}
             }
             _powerActionInProgress.value = false
+            _nasStatus.value = NasStatus.UNKNOWN
         }
     }
 
