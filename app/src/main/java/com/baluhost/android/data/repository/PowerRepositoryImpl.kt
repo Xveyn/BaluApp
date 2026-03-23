@@ -1,34 +1,41 @@
 package com.baluhost.android.data.repository
 
-import com.baluhost.android.data.remote.api.FritzBoxApi
+import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.data.network.FritzBoxTR064Client
+import com.baluhost.android.data.network.WolResult
 import com.baluhost.android.data.remote.api.SleepApi
 import com.baluhost.android.domain.repository.PowerRepository
 import com.baluhost.android.util.Result
+import kotlinx.coroutines.flow.first
 import retrofit2.HttpException
 import javax.inject.Inject
 
 class PowerRepositoryImpl @Inject constructor(
-    private val fritzBoxApi: FritzBoxApi,
-    private val sleepApi: SleepApi
+    private val sleepApi: SleepApi,
+    private val fritzBoxClient: FritzBoxTR064Client,
+    private val preferencesManager: PreferencesManager
 ) : PowerRepository {
 
     override suspend fun sendWol(): Result<String> {
         return try {
-            val response = fritzBoxApi.sendWol()
-            if (response.success) {
-                Result.Success(response.message)
-            } else {
-                Result.Error(Exception(response.message))
+            val host = preferencesManager.getFritzBoxHost().first()
+            val port = preferencesManager.getFritzBoxPort().first()
+            val username = preferencesManager.getFritzBoxUsername().first()
+            val password = preferencesManager.getFritzBoxPassword() ?: ""
+            val mac = preferencesManager.getFritzBoxMacAddress().first()
+
+            if (mac.isEmpty()) {
+                return Result.Error(Exception("Fritz!Box nicht konfiguriert — MAC-Adresse fehlt"))
             }
-        } catch (e: HttpException) {
-            val msg = when (e.code()) {
-                400 -> "Fritz!Box nicht konfiguriert"
-                503 -> "Fritz!Box nicht erreichbar"
-                else -> "WoL fehlgeschlagen: ${e.message()}"
+
+            when (val result = fritzBoxClient.sendWol(host, port, username, password, mac)) {
+                is WolResult.Success -> Result.Success("WoL-Signal gesendet")
+                is WolResult.AuthError -> Result.Error(Exception("Fritz!Box Zugangsdaten ungültig"))
+                is WolResult.Unreachable -> Result.Error(Exception("Fritz!Box nicht erreichbar. VPN aktiv?"))
+                is WolResult.Error -> Result.Error(Exception(result.message))
             }
-            Result.Error(Exception(msg, e))
         } catch (e: Exception) {
-            Result.Error(Exception("Server nicht erreichbar", e))
+            Result.Error(Exception("WoL fehlgeschlagen: ${e.message}", e))
         }
     }
 

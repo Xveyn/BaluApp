@@ -7,7 +7,6 @@ import com.baluhost.android.data.remote.api.ActivityApi
 import com.baluhost.android.data.remote.api.AuthApi
 import com.baluhost.android.data.remote.api.EnergyApi
 import com.baluhost.android.data.remote.api.FilesApi
-import com.baluhost.android.data.remote.api.FritzBoxApi
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.data.remote.api.MonitoringApi
 import com.baluhost.android.data.remote.api.SharesApi
@@ -172,12 +171,6 @@ object NetworkModule {
     @Singleton
     fun provideNotificationsApi(retrofit: Retrofit): com.baluhost.android.data.remote.api.NotificationsApi {
         return retrofit.create(com.baluhost.android.data.remote.api.NotificationsApi::class.java)
-    }
-
-    @Provides
-    @Singleton
-    fun provideFritzBoxApi(retrofit: Retrofit): FritzBoxApi {
-        return retrofit.create(FritzBoxApi::class.java)
     }
 
     @Provides
