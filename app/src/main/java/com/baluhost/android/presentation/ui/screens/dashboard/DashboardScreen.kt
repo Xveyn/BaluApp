@@ -78,6 +78,7 @@ fun DashboardScreen(
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
     val powerActionInProgress by viewModel.powerActionInProgress.collectAsState()
+    val isFritzBoxConfigured by viewModel.isFritzBoxConfigured.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -230,6 +231,7 @@ fun DashboardScreen(
                         uptimeSeconds = uiState.telemetry?.uptime?.toLong(),
                         isAdmin = isAdmin,
                         isActionInProgress = powerActionInProgress,
+                        isFritzBoxConfigured = isFritzBoxConfigured,
                         onSendWol = { viewModel.sendWol() },
                         onSendSoftSleep = { viewModel.sendSoftSleep() },
                         onSendSuspend = { viewModel.sendSuspend() }
@@ -827,6 +829,7 @@ private fun ServerStatusStrip(
     uptimeSeconds: Long?,
     isAdmin: Boolean,
     isActionInProgress: Boolean,
+    isFritzBoxConfigured: Boolean = false,
     onSendWol: () -> Unit,
     onSendSoftSleep: () -> Unit,
     onSendSuspend: () -> Unit
@@ -917,16 +920,24 @@ private fun ServerStatusStrip(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     if (!isOnline) {
-                        PowerOptionButton(
-                            icon = Icons.Default.WbSunny,
-                            label = "NAS aufwecken",
-                            description = "Wake-on-LAN über Fritz!Box",
-                            color = Green500,
-                            onClick = {
-                                showPowerDialog = false
-                                confirmAction = PowerAction.WOL
-                            }
-                        )
+                        if (isFritzBoxConfigured) {
+                            PowerOptionButton(
+                                icon = Icons.Default.WbSunny,
+                                label = "NAS aufwecken",
+                                description = "Wake-on-LAN über Fritz!Box",
+                                color = Green500,
+                                onClick = {
+                                    showPowerDialog = false
+                                    confirmAction = PowerAction.WOL
+                                }
+                            )
+                        } else {
+                            Text(
+                                text = "Fritz!Box in Einstellungen konfigurieren, um WoL zu nutzen.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Slate400
+                            )
+                        }
                     } else {
                         PowerOptionButton(
                             icon = Icons.Default.Bedtime,

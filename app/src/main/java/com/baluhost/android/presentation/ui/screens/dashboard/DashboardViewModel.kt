@@ -85,6 +85,9 @@ class DashboardViewModel @Inject constructor(
     private val _isAdmin = MutableStateFlow(false)
     val isAdmin: StateFlow<Boolean> = _isAdmin.asStateFlow()
 
+    private val _isFritzBoxConfigured = MutableStateFlow(false)
+    val isFritzBoxConfigured: StateFlow<Boolean> = _isFritzBoxConfigured.asStateFlow()
+
     private val _powerActionInProgress = MutableStateFlow(false)
     val powerActionInProgress: StateFlow<Boolean> = _powerActionInProgress.asStateFlow()
 
@@ -349,6 +352,7 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             val role = preferencesManager.getUserRole().first() ?: "user"
             _isAdmin.value = role == "admin"
+            _isFritzBoxConfigured.value = preferencesManager.isFritzBoxConfigured().first()
         }
     }
 
