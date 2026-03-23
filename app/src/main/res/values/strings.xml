@@ -42,4 +42,15 @@
     <string name="vpn_notification_channel">VPN Service</string>
     <string name="vpn_notification_title">BaluHost VPN</string>
     <string name="vpn_notification_text">Connection active</string>
+
+    <!-- Power Management -->
+    <string name="power_management">Power Management</string>
+    <string name="power_wake_nas">NAS aufwecken</string>
+    <string name="power_wake_nas_confirm">NAS über Fritz!Box aufwecken?</string>
+    <string name="power_soft_sleep">Soft Sleep</string>
+    <string name="power_soft_sleep_desc">Services pausieren, Disks herunterfahren</string>
+    <string name="power_soft_sleep_confirm">NAS in den Soft-Sleep versetzen?\n\nServices werden pausiert und Disks heruntergefahren.</string>
+    <string name="power_suspend">Suspend</string>
+    <string name="power_suspend_desc">System komplett schlafen legen</string>
+    <string name="power_suspend_confirm">NAS komplett suspendieren?\n\nDas System wird in den Schlafmodus versetzt.</string>
 </resources>

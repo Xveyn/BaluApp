@@ -54,3 +54,8 @@ data class TapoDevicePowerDto(
     @SerializedName("energy_today_kwh")
     val energyTodayKwh: Double? = null
 )
+
+data class PowerActionResponse(
+    val success: Boolean,
+    val message: String
+)
