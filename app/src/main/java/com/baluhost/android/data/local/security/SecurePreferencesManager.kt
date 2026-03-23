@@ -237,4 +237,22 @@ class SecurePreferencesManager @Inject constructor(
             .remove("adapter_${adapterKey}_pass")
             .apply()
     }
+
+    // ========== Fritz!Box Credentials ==========
+
+    fun saveFritzBoxPassword(password: String) {
+        sharedPreferences.edit()
+            .putString("fritzbox_password", password)
+            .apply()
+    }
+
+    fun getFritzBoxPassword(): String? {
+        return sharedPreferences.getString("fritzbox_password", null)
+    }
+
+    fun clearFritzBoxPassword() {
+        sharedPreferences.edit()
+            .remove("fritzbox_password")
+            .apply()
+    }
 }

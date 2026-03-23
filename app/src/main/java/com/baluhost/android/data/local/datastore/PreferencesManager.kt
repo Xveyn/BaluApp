@@ -451,8 +451,57 @@ class PreferencesManager @Inject constructor(
         return dataStore.data.map { prefs -> prefs[stringPreferencesKey("vpn_type")] }
     }
 
+    // Fritz!Box Config (for direct TR-064 WoL)
+    suspend fun saveFritzBoxHost(host: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("fritzbox_host")] = host }
+    }
+
+    fun getFritzBoxHost(): Flow<String> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("fritzbox_host")] ?: "192.168.178.1" }
+    }
+
+    suspend fun saveFritzBoxPort(port: Int) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("fritzbox_port")] = port.toString() }
+    }
+
+    fun getFritzBoxPort(): Flow<Int> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("fritzbox_port")]?.toIntOrNull() ?: 49000 }
+    }
+
+    suspend fun saveFritzBoxUsername(username: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("fritzbox_username")] = username }
+    }
+
+    fun getFritzBoxUsername(): Flow<String> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("fritzbox_username")] ?: "" }
+    }
+
+    suspend fun saveFritzBoxMacAddress(mac: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("fritzbox_mac")] = mac }
+    }
+
+    fun getFritzBoxMacAddress(): Flow<String> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("fritzbox_mac")] ?: "" }
+    }
+
+    suspend fun saveFritzBoxPassword(password: String) {
+        securePreferences.saveFritzBoxPassword(password)
+    }
+
+    fun getFritzBoxPassword(): String? {
+        return securePreferences.getFritzBoxPassword()
+    }
+
+    fun isFritzBoxConfigured(): Flow<Boolean> {
+        return dataStore.data.map { prefs ->
+            val mac = prefs[stringPreferencesKey("fritzbox_mac")] ?: ""
+            mac.isNotEmpty()
+        }
+    }
+
     // Clear all data
     suspend fun clearAll() {
         dataStore.edit { prefs -> prefs.clear() }
+        securePreferences.clearFritzBoxPassword()
     }
 }
