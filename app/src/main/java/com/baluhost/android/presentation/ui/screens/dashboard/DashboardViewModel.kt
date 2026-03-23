@@ -91,7 +91,7 @@ class DashboardViewModel @Inject constructor(
     private val _powerActionInProgress = MutableStateFlow(false)
     val powerActionInProgress: StateFlow<Boolean> = _powerActionInProgress.asStateFlow()
 
-    private val _snackbarEvent = MutableSharedFlow<String>()
+    private val _snackbarEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
 
     private var pollingJob: kotlinx.coroutines.Job? = null
