@@ -352,7 +352,11 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             val role = preferencesManager.getUserRole().first() ?: "user"
             _isAdmin.value = role == "admin"
-            _isFritzBoxConfigured.value = preferencesManager.isFritzBoxConfigured().first()
+        }
+        viewModelScope.launch {
+            preferencesManager.isFritzBoxConfigured().collectLatest { configured ->
+                _isFritzBoxConfigured.value = configured
+            }
         }
     }
 
