@@ -3,6 +3,7 @@ package com.baluhost.android.data.repository
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.network.FritzBoxTR064Client
 import com.baluhost.android.data.network.WolResult
+import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.data.remote.api.SleepApi
 import com.baluhost.android.domain.repository.PowerRepository
 import com.baluhost.android.util.Result
@@ -66,6 +67,29 @@ class PowerRepositoryImpl @Inject constructor(
             Result.Error(Exception("Suspend fehlgeschlagen: ${e.message()}", e))
         } catch (e: Exception) {
             Result.Error(Exception("Server nicht erreichbar", e))
+        }
+    }
+
+    override suspend fun checkNasStatus(): NasStatus {
+        return try {
+            val mac = preferencesManager.getFritzBoxMacAddress().first()
+            if (mac.isEmpty()) return NasStatus.UNKNOWN
+
+            val host = preferencesManager.getFritzBoxHost().first()
+            val port = preferencesManager.getFritzBoxPort().first()
+            val username = preferencesManager.getFritzBoxUsername().first()
+            val password = preferencesManager.getFritzBoxPassword() ?: ""
+
+            when (val result = fritzBoxClient.checkHostActive(host, port, username, password, mac)) {
+                is WolResult.Success -> NasStatus.ONLINE
+                is WolResult.Error -> {
+                    if (result.message == "inactive") NasStatus.SLEEPING else NasStatus.OFFLINE
+                }
+                is WolResult.AuthError -> NasStatus.OFFLINE
+                is WolResult.Unreachable -> NasStatus.OFFLINE
+            }
+        } catch (e: Exception) {
+            NasStatus.OFFLINE
         }
     }
 }
