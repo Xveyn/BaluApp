@@ -53,4 +53,15 @@
     <string name="power_suspend">Suspend</string>
     <string name="power_suspend_desc">System komplett schlafen legen</string>
     <string name="power_suspend_confirm">NAS komplett suspendieren?\n\nDas System wird in den Schlafmodus versetzt.</string>
+
+    <!-- Fritz!Box Settings -->
+    <string name="fritzbox_settings_title">Fritz!Box Einstellungen</string>
+    <string name="fritzbox_host">Host</string>
+    <string name="fritzbox_port">Port</string>
+    <string name="fritzbox_username">Benutzername</string>
+    <string name="fritzbox_password">Passwort</string>
+    <string name="fritzbox_mac_address">NAS MAC-Adresse</string>
+    <string name="fritzbox_test_connection">Verbindung testen</string>
+    <string name="fritzbox_save">Speichern</string>
+    <string name="fritzbox_description">Konfiguriere die Fritz!Box-Verbindung für direktes Wake-on-LAN, wenn das NAS schläft.</string>
 </resources>
