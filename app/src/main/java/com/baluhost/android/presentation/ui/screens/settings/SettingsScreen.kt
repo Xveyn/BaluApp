@@ -40,11 +40,13 @@ fun SettingsScreen(
     onNavigateToSplash: () -> Unit,
     onNavigateToFolderSync: () -> Unit,
     onNavigateToNotificationPreferences: () -> Unit = {},
+    onNavigateToFritzBox: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     vpnViewModel: VpnViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val vpnUiState by vpnViewModel.uiState.collectAsState()
+    val isAdmin by viewModel.isAdmin.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinSetupError by remember { mutableStateOf<String?>(null) }
@@ -323,6 +325,42 @@ fun SettingsScreen(
                             contentDescription = "Öffnen",
                             tint = Sky400
                         )
+                    }
+                }
+
+                // Fritz!Box Settings Card (admin only)
+                if (isAdmin) {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        intensity = GlassIntensity.Medium,
+                        onClick = onNavigateToFritzBox
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "FRITZ!BOX",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Slate500,
+                                    letterSpacing = 2.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Wake-on-LAN Konfiguration",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Slate400
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Öffnen",
+                                tint = Sky400
+                            )
+                        }
                     }
                 }
 
