@@ -21,6 +21,7 @@ class FritzBoxTR064Client @Inject constructor() {
         private const val TAG = "FritzBoxTR064"
         private const val SERVICE_TYPE = "urn:dslforum-org:service:Hosts:1"
         private const val WOL_ACTION = "X_AVM-DE_WakeOnLANByMACAddress"
+        private const val HOST_ENTRY_ACTION = "GetSpecificHostEntry"
         private const val CONTROL_URL = "/upnp/control/hosts"
         private const val SCPD_URL = "/hostsSCPD.xml"
         private val XML_MEDIA_TYPE = "text/xml; charset=\"utf-8\"".toMediaType()
@@ -176,6 +177,72 @@ class FritzBoxTR064Client @Inject constructor() {
             WolResult.Unreachable
         } catch (e: Exception) {
             WolResult.Error(e.message ?: "Unbekannter Fehler")
+        }
+    }
+
+    private fun buildHostEntryEnvelope(macAddress: String): String {
+        return "<?xml version=\"1.0\" encoding=\"utf-8\"?>" +
+            "<s:Envelope xmlns:s=\"http://schemas.xmlsoap.org/soap/envelope/\"" +
+            " s:encodingStyle=\"http://schemas.xmlsoap.org/soap/encoding/\">" +
+            "<s:Body>" +
+            "<u:$HOST_ENTRY_ACTION xmlns:u=\"$SERVICE_TYPE\">" +
+            "<NewMACAddress>$macAddress</NewMACAddress>" +
+            "</u:$HOST_ENTRY_ACTION>" +
+            "</s:Body>" +
+            "</s:Envelope>"
+    }
+
+    suspend fun checkHostActive(
+        host: String,
+        port: Int,
+        username: String,
+        password: String,
+        macAddress: String
+    ): WolResult = withContext(Dispatchers.IO) {
+        try {
+            val url = "http://$host:$port$CONTROL_URL"
+            val body = buildHostEntryEnvelope(macAddress)
+            val client = buildClient(username, password)
+
+            val request = Request.Builder()
+                .url(url)
+                .post(body.toRequestBody(XML_MEDIA_TYPE))
+                .header("SOAPAction", "\"$SERVICE_TYPE#$HOST_ENTRY_ACTION\"")
+                .build()
+
+            val response = client.newCall(request).execute()
+            val responseBody = response.body?.string() ?: ""
+
+            when {
+                response.code == 401 -> WolResult.AuthError
+                response.code != 200 -> WolResult.Error("HTTP ${response.code}")
+                responseBody.contains("Fault", ignoreCase = true) -> {
+                    val fault = parseSoapFault(responseBody)
+                    WolResult.Error(fault ?: "SOAP Fault")
+                }
+                else -> {
+                    val active = parseNewActive(responseBody)
+                    if (active) WolResult.Success else WolResult.Error("inactive")
+                }
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Host check failed", e)
+            WolResult.Unreachable
+        } catch (e: Exception) {
+            Log.e(TAG, "Host check unexpected error", e)
+            WolResult.Error(e.message ?: "Unbekannter Fehler")
+        }
+    }
+
+    private fun parseNewActive(xml: String): Boolean {
+        return try {
+            val start = xml.indexOf("<NewActive>")
+            val end = xml.indexOf("</NewActive>")
+            if (start >= 0 && end > start) {
+                xml.substring(start + "<NewActive>".length, end).trim() == "1"
+            } else false
+        } catch (e: Exception) {
+            false
         }
     }
 
