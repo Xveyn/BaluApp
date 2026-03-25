@@ -7,6 +7,8 @@ import com.baluhost.android.domain.model.User
 import com.baluhost.android.domain.model.VpnConfig
 import com.baluhost.android.domain.usecase.auth.RegisterDeviceUseCase
 import com.baluhost.android.domain.usecase.vpn.ImportVpnConfigUseCase
+import com.baluhost.android.util.BssidReader
+import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.util.Result
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -22,16 +24,25 @@ class QrScannerViewModelTest {
     
     private lateinit var registerDeviceUseCase: RegisterDeviceUseCase
     private lateinit var importVpnConfigUseCase: ImportVpnConfigUseCase
+    private lateinit var bssidReader: BssidReader
+    private lateinit var preferencesManager: PreferencesManager
     private lateinit var viewModel: QrScannerViewModel
-    
+
     private val testDispatcher = StandardTestDispatcher()
-    
+
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         registerDeviceUseCase = mockk()
         importVpnConfigUseCase = mockk()
-        viewModel = QrScannerViewModel(registerDeviceUseCase, importVpnConfigUseCase)
+        bssidReader = mockk()
+        preferencesManager = mockk(relaxed = true)
+        viewModel = QrScannerViewModel(
+            registerDeviceUseCase,
+            importVpnConfigUseCase,
+            bssidReader,
+            preferencesManager
+        )
     }
     
     @After
@@ -229,7 +240,7 @@ class QrScannerViewModelTest {
             importVpnConfigUseCase(any())
         }
     }
-    
+
     @Test
     fun `resetScanner should return to Scanning state`() = runTest {
         // Given - Set to error state first
@@ -274,15 +285,37 @@ class QrScannerViewModelTest {
             Result.Success(authResult)
         }
         
-        // When - Try to scan twice quickly
+        // When - Scan once, let the coroutine start (sets state to Processing), then scan again
         viewModel.onQrCodeScanned(qrJson)
-        viewModel.onQrCodeScanned(qrJson) // Second scan should be ignored
-        
+        testDispatcher.scheduler.advanceTimeBy(1) // Let first coroutine start and set Processing state
+        viewModel.onQrCodeScanned(qrJson) // Second scan should be ignored (state is Processing)
+
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Then - Should only register once
         coVerify(exactly = 1) {
             registerDeviceUseCase(any(), any())
         }
+    }
+
+    @Test
+    fun `captureHomeBssid saves BSSID when available`() = runTest {
+        every { bssidReader.getCurrentBssid() } returns "AA:BB:CC:DD:EE:FF"
+        coEvery { preferencesManager.saveHomeBssid(any()) } just Runs
+
+        viewModel.captureHomeBssid()
+        advanceUntilIdle()
+
+        coVerify { preferencesManager.saveHomeBssid("AA:BB:CC:DD:EE:FF") }
+    }
+
+    @Test
+    fun `captureHomeBssid skips save when BSSID is null`() = runTest {
+        every { bssidReader.getCurrentBssid() } returns null
+
+        viewModel.captureHomeBssid()
+        advanceUntilIdle()
+
+        coVerify(exactly = 0) { preferencesManager.saveHomeBssid(any()) }
     }
 }
