@@ -3,8 +3,10 @@ package com.baluhost.android.presentation.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.util.BssidReader
 import com.baluhost.android.util.ByteFormatter
 import com.baluhost.android.util.ByteUnitMode
+import com.baluhost.android.util.NetworkMonitor
 import com.baluhost.android.data.local.security.AppLockManager
 import com.baluhost.android.data.local.security.BiometricAuthManager
 import com.baluhost.android.data.local.security.PinManager
@@ -31,7 +33,9 @@ class SettingsViewModel @Inject constructor(
     private val pinManager: PinManager,
     private val appLockManager: AppLockManager,
     private val getCacheStatsUseCase: com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase,
-    private val clearCacheUseCase: com.baluhost.android.domain.usecase.cache.ClearCacheUseCase
+    private val clearCacheUseCase: com.baluhost.android.domain.usecase.cache.ClearCacheUseCase,
+    private val bssidReader: BssidReader,
+    private val networkMonitor: NetworkMonitor
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -45,6 +49,7 @@ class SettingsViewModel @Inject constructor(
         loadSecuritySettings()
         loadCacheStats()
         loadByteUnitMode()
+        loadNetworkSettings()
     }
     
     private fun loadUserInfo() {
@@ -257,6 +262,39 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private fun loadNetworkSettings() {
+        viewModelScope.launch {
+            val bssid = preferencesManager.getHomeBssidOnce()
+            val autoVpn = preferencesManager.isAutoVpnOnExternal().first()
+            val onWifi = networkMonitor.isCurrentlyWifiConnected()
+            _uiState.update { it.copy(
+                homeBssidConfigured = bssid != null,
+                autoVpnOnExternal = autoVpn,
+                isOnWifi = onWifi
+            ) }
+        }
+    }
+
+    fun setHomeNetwork() {
+        viewModelScope.launch {
+            val bssid = bssidReader.getCurrentBssid()
+            if (bssid != null) {
+                preferencesManager.saveHomeBssid(bssid)
+                _uiState.update { it.copy(homeBssidConfigured = true) }
+                _uiState.update { it.copy(error = null) }
+            } else {
+                _uiState.update { it.copy(error = "Verbinde dich zuerst mit deinem Heim-WLAN") }
+            }
+        }
+    }
+
+    fun toggleAutoVpn(enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.saveAutoVpnOnExternal(enabled)
+            _uiState.update { it.copy(autoVpnOnExternal = enabled) }
+        }
+    }
+
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
     }
@@ -284,5 +322,9 @@ data class SettingsUiState(
     val cacheNewestAgeDays: Int? = null,
     val isClearingCache: Boolean = false,
     // Byte unit mode
-    val byteUnitMode: com.baluhost.android.util.ByteUnitMode = com.baluhost.android.util.ByteUnitMode.BINARY
+    val byteUnitMode: com.baluhost.android.util.ByteUnitMode = com.baluhost.android.util.ByteUnitMode.BINARY,
+    // Network settings
+    val homeBssidConfigured: Boolean = false,
+    val autoVpnOnExternal: Boolean = false,
+    val isOnWifi: Boolean = false
 )
