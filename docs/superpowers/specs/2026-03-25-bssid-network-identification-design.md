@@ -95,10 +95,13 @@ New keys and methods, same style as existing `saveFritzBoxHost()`/`getFritzBoxHo
 
 New methods:
 - `suspend fun saveHomeBssid(bssid: String)` — stores uppercase BSSID
-- `fun getHomeBssid(): Flow<String?>` — reactive access
+- `fun getHomeBssid(): Flow<String?>` — reactive access (for UI observation)
+- `suspend fun getHomeBssidOnce(): String?` — synchronous one-shot read via `dataStore.data.map { ... }.first()` (for use in `NetworkStateManager.checkHomeNetworkStatus()` which is non-suspend). Follows the existing pattern of `getSyncFolderUri()`.
 - `suspend fun clearHomeBssid()` — removes stored BSSID
 - `suspend fun saveAutoVpnOnExternal(enabled: Boolean)`
 - `fun isAutoVpnOnExternal(): Flow<Boolean>` — default `false`
+
+**`clearAll()` behavior:** The existing `clearAll()` calls `dataStore.edit { prefs -> prefs.clear() }`, which will also clear `home_bssid` and `auto_vpn_on_external`. This is the desired behavior — a device reset should clear the home network config. After re-registration, BSSID is recaptured automatically.
 
 Note: `server_url` is already stored during registration (`RegisterDeviceUseCase:87`) — no duplication needed.
 
@@ -115,13 +118,27 @@ Note: `server_url` is already stored during registration (`RegisterDeviceUseCase
 ```
 1. VPN active?              -> return true (HOME) [existing]
 2. Not on WiFi?             -> return false (EXTERNAL) [existing]
-3. BSSID available? (BssidReader.getCurrentBssid())
-   3a. Stored BSSID exists? (PreferencesManager.getHomeBssid())
-       -> Match:    return true (HOME)
-       -> Mismatch: return false (EXTERNAL)
-   3b. No stored BSSID -> fall through to step 4
-4. Subnet comparison        -> existing logic (fallback)
+3. BSSID check (instant, bypasses 30s cache):
+   3a. currentBssid = BssidReader.getCurrentBssid()
+   3b. storedBssid = cached in-memory (see below)
+   3c. Both non-null?
+       -> Match:    return true (HOME), update cache timestamp
+       -> Mismatch: return false (EXTERNAL), update cache timestamp
+   3d. currentBssid is null (permission denied) but storedBssid exists
+       -> fall through to step 4 (cannot determine via BSSID)
+   3e. storedBssid is null (not configured)
+       -> fall through to step 4
+4. Cache still valid? (30s) -> return cached result [existing]
+5. Subnet comparison        -> existing logic (fallback)
 ```
+
+**BSSID bypasses the 30s cache** because the read is instant (< 1ms, no network I/O). The cache only applies to the subnet fallback path (step 5) which involves network lookups.
+
+**Sync/async handling:** `checkHomeNetworkStatus()` is synchronous (non-suspend). To avoid blocking on DataStore:
+- `NetworkStateManager` caches `storedBssid` in a `private var cachedHomeBssid: String?` field
+- On init: launches a coroutine that collects `preferencesManager.getHomeBssid()` and updates the cached value
+- `checkHomeNetworkStatus()` reads from `cachedHomeBssid` (in-memory, instant)
+- This follows the reactive pattern — when BSSID is saved (at registration or via Settings), the Flow emits and the cache updates automatically
 
 The public signature `checkHomeNetworkStatus(serverUrl): Boolean?` remains unchanged. All existing consumers (`DashboardViewModel`, `observeHomeNetworkStatus()`) work without modification.
 
@@ -139,7 +156,30 @@ class NetworkStateManager(
 )
 ```
 
-The provider in `NetworkModule.kt` is updated accordingly.
+**NetworkModule.kt provider update** — the existing `provideNetworkStateManager()` changes from:
+```kotlin
+@Provides
+@Singleton
+fun provideNetworkStateManager(
+    @ApplicationContext context: Context,
+    networkMonitor: NetworkMonitor
+): NetworkStateManager {
+    return NetworkStateManager(context, networkMonitor)
+}
+```
+to:
+```kotlin
+@Provides
+@Singleton
+fun provideNetworkStateManager(
+    @ApplicationContext context: Context,
+    networkMonitor: NetworkMonitor,
+    bssidReader: BssidReader,
+    preferencesManager: PreferencesManager
+): NetworkStateManager {
+    return NetworkStateManager(context, networkMonitor, bssidReader, preferencesManager)
+}
+```
 
 ### 5. BSSID Capture at Registration (modify)
 
@@ -156,11 +196,18 @@ The provider in `NetworkModule.kt` is updated accordingly.
 - Adds a `rememberLauncherForActivityResult(RequestPermission())` for WiFi permission (analogous to existing camera permission pattern)
 - On `QrScannerState.Success`: launches WiFi permission request
 - On grant: calls `viewModel.captureHomeBssid()`
-- On deny: does nothing — app falls back to subnet check. No re-prompting.
+- On deny: does nothing — app falls back to subnet check. No re-prompting. User can configure later via Settings > "Heimnetzwerk setzen".
 
 **Permission selection logic:**
 - API 33+: request `NEARBY_WIFI_DEVICES`
 - API <= 32: request `ACCESS_FINE_LOCATION`
+
+**Permission rationale (API <= 32):** On API 26-32 the system dialog says "Allow access to device's location?" which is confusing. Before launching the system dialog, show a brief rationale `AlertDialog`:
+> "BaluApp mochte dein Heimnetzwerk (WLAN) erkennen, um automatisch die richtige Verbindung zu wahlen. Dazu wird einmalig der WLAN-Zugangspunkt identifiziert. Dein Standort wird nicht gespeichert oder ubertragen."
+> [Weiter] [Uberspringen]
+
+"Weiter" launches the system permission dialog. "Uberspringen" skips BSSID capture (subnet fallback).
+On API 33+ this rationale is not needed since `NEARBY_WIFI_DEVICES` with `neverForLocation` does not mention location.
 
 ### 6. Settings UI (modify)
 
@@ -176,10 +223,10 @@ The provider in `NetworkModule.kt` is updated accordingly.
   - `fun toggleAutoVpn(enabled: Boolean)` — saves to PreferencesManager
 
 **SettingsScreen:**
-- New `GlassCard` titled **"NETZWERK"** — placed between the existing "BENACHRICHTIGUNGEN" and "FRITZ!BOX" cards
+- New `GlassCard` titled **"NETZWERK"** — placed directly after "BENACHRICHTIGUNGEN" (before "FRITZ!BOX" for admins, before "ORDNER-SYNCHRONISATION" for non-admins)
 - Contents:
   - Status text: "Heimnetzwerk konfiguriert" / "Nicht konfiguriert"
-  - "Heimnetzwerk setzen" button (GradientButton, enabled only when on WiFi)
+  - "Heimnetzwerk setzen" button (GradientButton, enabled only when on WiFi). Also handles permission request if not yet granted (same rationale dialog as in Section 5 for API <= 32).
   - "Auto-VPN wenn extern" switch (default: off)
 
 ### 7. VPN Trigger on EXTERNAL Detection (modify)
@@ -200,6 +247,7 @@ The provider in `NetworkModule.kt` is updated accordingly.
      - `false`: emit `VpnAction.ShowPrompt`, set `vpnPromptShown = true`
 
 **DashboardScreen (Composable):**
+- **Signature change required:** `DashboardScreen` must gain a `vpnViewModel: VpnViewModel = hiltViewModel()` parameter (currently only has `viewModel: DashboardViewModel`). The NavGraph call site must be updated accordingly. This follows the existing pattern in `SettingsScreen` which already receives both `SettingsViewModel` and `VpnViewModel`.
 - Collects `vpnActionEvent`
 - On `AutoConnect`: calls `vpnViewModel.connect()`
 - On `ShowPrompt`: shows AlertDialog:
@@ -208,7 +256,7 @@ The provider in `NetworkModule.kt` is updated accordingly.
 - "Verbinden" -> `vpnViewModel.connect()`
 - "Nicht jetzt" -> dismiss, no retry this session
 
-No ViewModel-to-ViewModel coupling — the Composable bridges both, following the existing pattern in `SettingsScreen` where both `SettingsViewModel` and `VpnViewModel` are parameters.
+**Session guard scope:** `vpnPromptShown` lives in `DashboardViewModel` which survives configuration changes but not process death. This means the prompt resets on process death, which is acceptable — if the app restarts, the user should be notified again.
 
 ## Testing Strategy
 
