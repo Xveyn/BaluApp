@@ -41,7 +41,7 @@ class VpnViewModelTest {
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
         coEvery { fetchVpnConfigUseCase() } returns Result.Error(Exception("No config"))
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
     }
     
     @After
@@ -56,7 +56,7 @@ class VpnViewModelTest {
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config_string")
         
         // When
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Then
@@ -73,7 +73,7 @@ class VpnViewModelTest {
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
         
         // When
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Then
@@ -89,7 +89,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         coEvery { connectVpnUseCase() } returns Result.Success(true)
@@ -117,7 +117,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         val errorMessage = "VPN connection failed"
@@ -145,7 +145,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Connect first
@@ -178,7 +178,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         coEvery { connectVpnUseCase() } returns Result.Success(true)
@@ -202,7 +202,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // When - Try to disconnect when not connected
@@ -220,7 +220,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         coEvery { connectVpnUseCase() } coAnswers {
