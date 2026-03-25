@@ -96,7 +96,7 @@ New keys and methods, same style as existing `saveFritzBoxHost()`/`getFritzBoxHo
 New methods:
 - `suspend fun saveHomeBssid(bssid: String)` — stores uppercase BSSID
 - `fun getHomeBssid(): Flow<String?>` — reactive access (for UI observation)
-- `suspend fun getHomeBssidOnce(): String?` — synchronous one-shot read via `dataStore.data.map { ... }.first()` (for use in `NetworkStateManager.checkHomeNetworkStatus()` which is non-suspend). Follows the existing pattern of `getSyncFolderUri()`.
+- `suspend fun getHomeBssidOnce(): String?` — one-shot suspend read via `dataStore.data.map { ... }.first()`. Used by `SettingsViewModel` to load initial state and as a convenience for non-Flow consumers. Follows the existing pattern of `getSyncFolderUri()`. Note: `NetworkStateManager` uses the Flow-based `getHomeBssid()` with in-memory caching instead (see Section 4).
 - `suspend fun clearHomeBssid()` — removes stored BSSID
 - `suspend fun saveAutoVpnOnExternal(enabled: Boolean)`
 - `fun isAutoVpnOnExternal(): Flow<Boolean>` — default `false`
@@ -135,10 +135,12 @@ Note: `server_url` is already stored during registration (`RegisterDeviceUseCase
 **BSSID bypasses the 30s cache** because the read is instant (< 1ms, no network I/O). The cache only applies to the subnet fallback path (step 5) which involves network lookups.
 
 **Sync/async handling:** `checkHomeNetworkStatus()` is synchronous (non-suspend). To avoid blocking on DataStore:
-- `NetworkStateManager` caches `storedBssid` in a `private var cachedHomeBssid: String?` field
+- `NetworkStateManager` caches `storedBssid` in a `@Volatile private var cachedHomeBssid: String?` field (`@Volatile` ensures cross-thread visibility since the field is written by the collection coroutine and read by `checkHomeNetworkStatus()` which can be called from any thread)
 - On init: launches a coroutine that collects `preferencesManager.getHomeBssid()` and updates the cached value
 - `checkHomeNetworkStatus()` reads from `cachedHomeBssid` (in-memory, instant)
 - This follows the reactive pattern — when BSSID is saved (at registration or via Settings), the Flow emits and the cache updates automatically
+
+**CoroutineScope:** `NetworkStateManager` is a `@Singleton` (lives for the entire app lifetime), so it creates its own scope: `private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)`. No explicit cancellation needed since the scope lives as long as the process. The init block launches `scope.launch { preferencesManager.getHomeBssid().collect { cachedHomeBssid = it } }`.
 
 The public signature `checkHomeNetworkStatus(serverUrl): Boolean?` remains unchanged. All existing consumers (`DashboardViewModel`, `observeHomeNetworkStatus()`) work without modification.
 
@@ -194,19 +196,19 @@ fun provideNetworkStateManager(
 
 **QrScannerScreen (Composable):**
 - Adds a `rememberLauncherForActivityResult(RequestPermission())` for WiFi permission (analogous to existing camera permission pattern)
-- On `QrScannerState.Success`: launches WiFi permission request
-- On grant: calls `viewModel.captureHomeBssid()`
-- On deny: does nothing — app falls back to subnet check. No re-prompting. User can configure later via Settings > "Heimnetzwerk setzen".
+- On `QrScannerState.Success`: launches WiFi permission request **before** navigating to files. The existing `LaunchedEffect` that calls `onNavigateToFiles()` must be gated on a new flag `bssidCaptureCompleted` in `QrScannerState.Success` (default `false`). The ViewModel sets this flag to `true` after `captureHomeBssid()` completes (whether BSSID was saved or not). This prevents the navigation from dismissing the permission dialog.
+- On grant: calls `viewModel.captureHomeBssid()` which reads BSSID, saves it, and sets `bssidCaptureCompleted = true`
+- On deny: ViewModel sets `bssidCaptureCompleted = true` immediately — app falls back to subnet check. No re-prompting. User can configure later via Settings > "Heimnetzwerk setzen".
 
 **Permission selection logic:**
 - API 33+: request `NEARBY_WIFI_DEVICES`
 - API <= 32: request `ACCESS_FINE_LOCATION`
 
 **Permission rationale (API <= 32):** On API 26-32 the system dialog says "Allow access to device's location?" which is confusing. Before launching the system dialog, show a brief rationale `AlertDialog`:
-> "BaluApp mochte dein Heimnetzwerk (WLAN) erkennen, um automatisch die richtige Verbindung zu wahlen. Dazu wird einmalig der WLAN-Zugangspunkt identifiziert. Dein Standort wird nicht gespeichert oder ubertragen."
-> [Weiter] [Uberspringen]
+> "BaluApp möchte dein Heimnetzwerk (WLAN) erkennen, um automatisch die richtige Verbindung zu wählen. Dazu wird einmalig der WLAN-Zugangspunkt identifiziert. Dein Standort wird nicht gespeichert oder übertragen."
+> [Weiter] [Überspringen]
 
-"Weiter" launches the system permission dialog. "Uberspringen" skips BSSID capture (subnet fallback).
+"Weiter" launches the system permission dialog. "Überspringen" skips BSSID capture (subnet fallback).
 On API 33+ this rationale is not needed since `NEARBY_WIFI_DEVICES` with `neverForLocation` does not mention location.
 
 ### 6. Settings UI (modify)
