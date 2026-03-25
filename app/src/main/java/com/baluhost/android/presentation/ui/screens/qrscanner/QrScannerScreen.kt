@@ -1,7 +1,10 @@
 package com.baluhost.android.presentation.ui.screens.qrscanner
 
 import android.Manifest
+import android.os.Build
 import android.util.Size
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -54,15 +57,49 @@ fun QrScannerScreen(
     val uiState by viewModel.uiState.collectAsState()
     val cameraPermissionState = rememberPermissionState(Manifest.permission.CAMERA)
     
-    // Navigate to files on successful registration
+    // BSSID permission handling
+    val bssidPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.captureHomeBssid()
+        } else {
+            viewModel.markBssidCaptureCompleted()
+        }
+    }
+    var showBssidRationale by remember { mutableStateOf(false) }
+
+    // Determine which permission to request based on API level
+    val bssidPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        Manifest.permission.NEARBY_WIFI_DEVICES
+    } else {
+        Manifest.permission.ACCESS_FINE_LOCATION
+    }
+
+    // Guard to prevent re-triggering permission flow on recomposition
+    var bssidPermissionFlowStarted by remember { mutableStateOf(false) }
+
+    // Navigate to files after BSSID capture completes
     LaunchedEffect(uiState) {
-        if (uiState is QrScannerState.Success) {
-            // Short delay to show success message if VPN was configured
-            val state = uiState as QrScannerState.Success
-            if (state.vpnConfigured) {
-                kotlinx.coroutines.delay(2000) // Show VPN success message for 2s
+        val state = uiState
+        if (state is QrScannerState.Success) {
+            if (!state.bssidCaptureCompleted && !bssidPermissionFlowStarted) {
+                // Trigger BSSID permission flow (once only)
+                bssidPermissionFlowStarted = true
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                    // API <= 32: show rationale first (location permission is confusing)
+                    showBssidRationale = true
+                } else {
+                    // API 33+: NEARBY_WIFI_DEVICES doesn't mention location
+                    bssidPermissionLauncher.launch(bssidPermission)
+                }
+            } else if (state.bssidCaptureCompleted) {
+                // BSSID capture done — navigate
+                if (state.vpnConfigured) {
+                    kotlinx.coroutines.delay(2000)
+                }
+                onNavigateToFiles()
             }
-            onNavigateToFiles()
         }
     }
     
@@ -123,6 +160,41 @@ fun QrScannerScreen(
                 }
             }
         }
+    }
+
+    // BSSID permission rationale (API <= 32 only)
+    if (showBssidRationale) {
+        AlertDialog(
+            onDismissRequest = {
+                showBssidRationale = false
+                viewModel.markBssidCaptureCompleted()
+            },
+            title = { Text("WLAN-Erkennung") },
+            text = {
+                Text(
+                    "BaluApp möchte dein Heimnetzwerk (WLAN) erkennen, um automatisch " +
+                    "die richtige Verbindung zu wählen. Dazu wird einmalig der " +
+                    "WLAN-Zugangspunkt identifiziert. Dein Standort wird nicht " +
+                    "gespeichert oder übertragen."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBssidRationale = false
+                    bssidPermissionLauncher.launch(bssidPermission)
+                }) {
+                    Text("Weiter")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showBssidRationale = false
+                    viewModel.markBssidCaptureCompleted()
+                }) {
+                    Text("Überspringen")
+                }
+            }
+        )
     }
 }
 
