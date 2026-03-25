@@ -45,6 +45,7 @@ import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.NotificationBell
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
 import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.presentation.ui.screens.vpn.VpnViewModel
 import com.baluhost.android.presentation.ui.theme.*
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -67,6 +68,7 @@ fun DashboardScreen(
     onNavigateToStorageDetail: () -> Unit = {},
     onNavigateToSharesDetail: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
+    vpnViewModel: VpnViewModel = hiltViewModel(),
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -86,6 +88,22 @@ fun DashboardScreen(
     LaunchedEffect(Unit) {
         viewModel.snackbarEvent.collect { message ->
             snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    // VPN action handling
+    var showVpnPrompt by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.vpnActionEvent.collect { action ->
+            when (action) {
+                is DashboardViewModel.VpnAction.AutoConnect -> {
+                    vpnViewModel.connect()
+                }
+                is DashboardViewModel.VpnAction.ShowPrompt -> {
+                    showVpnPrompt = true
+                }
+            }
         }
     }
 
@@ -404,6 +422,38 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    // VPN prompt dialog
+    if (showVpnPrompt) {
+        AlertDialog(
+            onDismissRequest = { showVpnPrompt = false },
+            title = {
+                Text(
+                    text = "Nicht im Heimnetzwerk",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text("Du bist nicht im Heimnetzwerk. VPN verbinden?")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showVpnPrompt = false
+                        vpnViewModel.connect()
+                    }
+                ) {
+                    Text("Verbinden", color = Sky400)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showVpnPrompt = false }) {
+                    Text("Nicht jetzt")
+                }
+            },
+            containerColor = Slate900
+        )
     }
 }
 
