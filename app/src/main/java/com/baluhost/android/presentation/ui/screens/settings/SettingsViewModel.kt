@@ -280,8 +280,7 @@ class SettingsViewModel @Inject constructor(
             val bssid = bssidReader.getCurrentBssid()
             if (bssid != null) {
                 preferencesManager.saveHomeBssid(bssid)
-                _uiState.update { it.copy(homeBssidConfigured = true) }
-                _uiState.update { it.copy(error = null) }
+                _uiState.update { it.copy(homeBssidConfigured = true, error = null) }
             } else {
                 _uiState.update { it.copy(error = "Verbinde dich zuerst mit deinem Heim-WLAN") }
             }
