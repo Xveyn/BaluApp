@@ -5,12 +5,18 @@ import com.baluhost.android.data.remote.api.MonitoringApi
 import com.baluhost.android.data.remote.dto.CpuSampleDto
 import com.baluhost.android.data.remote.dto.HourlySampleDto
 import com.baluhost.android.data.remote.dto.MemorySampleDto
+import com.baluhost.android.data.remote.dto.SleepEventDto
+import com.baluhost.android.data.remote.dto.UptimeSampleDto
 import com.baluhost.android.domain.model.CpuHistory
 import com.baluhost.android.domain.model.CpuSample
+import com.baluhost.android.domain.model.CurrentUptime
 import com.baluhost.android.domain.model.EnergyDashboardFull
 import com.baluhost.android.domain.model.MemoryHistory
 import com.baluhost.android.domain.model.MemorySample
 import com.baluhost.android.domain.model.PowerHourlySample
+import com.baluhost.android.domain.model.SleepEvent
+import com.baluhost.android.domain.model.UptimeHistory
+import com.baluhost.android.domain.model.UptimeSample
 import com.baluhost.android.domain.repository.MonitoringRepository
 import com.baluhost.android.util.Result
 import java.time.Instant
@@ -69,6 +75,39 @@ class MonitoringRepositoryImpl @Inject constructor(
             Result.Error(e)
         }
     }
+
+    override suspend fun getCurrentUptime(): Result<CurrentUptime> {
+        return try {
+            val dto = monitoringApi.getUptimeCurrent()
+            Result.Success(
+                CurrentUptime(
+                    timestamp = parseIsoTimestamp(dto.timestamp),
+                    serverUptimeSeconds = dto.serverUptimeSeconds,
+                    systemUptimeSeconds = dto.systemUptimeSeconds,
+                    serverStartTime = parseIsoTimestamp(dto.serverStartTime),
+                    systemBootTime = parseIsoTimestamp(dto.systemBootTime)
+                )
+            )
+        } catch (e: Exception) {
+            Result.Error(e)
+        }
+    }
+
+    override suspend fun getUptimeHistory(timeRange: String): Result<UptimeHistory> {
+        return try {
+            val dto = monitoringApi.getUptimeHistory(timeRange)
+            Result.Success(
+                UptimeHistory(
+                    samples = dto.samples.map { it.toUptimeDomain() },
+                    sleepEvents = dto.sleepEvents.map { it.toDomain() },
+                    sampleCount = dto.sampleCount,
+                    source = dto.source
+                )
+            )
+        } catch (e: Exception) {
+            Result.Error(e)
+        }
+    }
 }
 
 private fun CpuSampleDto.toDomain() = CpuSample(
@@ -88,6 +127,21 @@ private fun MemorySampleDto.toDomain() = MemorySample(
 private fun HourlySampleDto.toDomain() = PowerHourlySample(
     timestamp = parseIsoTimestamp(timestamp),
     avgWatts = avgWatts
+)
+
+private fun UptimeSampleDto.toUptimeDomain() = UptimeSample(
+    timestamp = parseIsoTimestamp(timestamp),
+    serverUptimeSeconds = serverUptimeSeconds,
+    systemUptimeSeconds = systemUptimeSeconds,
+    serverStartTime = parseIsoTimestamp(serverStartTime),
+    systemBootTime = parseIsoTimestamp(systemBootTime)
+)
+
+private fun SleepEventDto.toDomain() = SleepEvent(
+    timestamp = parseIsoTimestamp(timestamp),
+    previousState = previousState,
+    newState = newState,
+    durationSeconds = durationSeconds
 )
 
 private fun parseIsoTimestamp(iso: String): Long {
