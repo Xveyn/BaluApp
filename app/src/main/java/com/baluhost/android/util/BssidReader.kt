@@ -11,7 +11,9 @@ import javax.inject.Singleton
 
 /**
  * Reads the current WiFi BSSID.
- * Uses ConnectivityManager on API 31+, WifiManager on older versions.
+ * Uses ConnectivityManager on API 31+ with WifiManager fallback,
+ * since some devices (e.g. Android 16) return placeholder BSSID
+ * via ConnectivityManager even with ACCESS_FINE_LOCATION granted.
  */
 @Singleton
 class BssidReader @Inject constructor(
@@ -35,12 +37,11 @@ class BssidReader @Inject constructor(
      * Returns uppercase colon-separated MAC, or null if unavailable.
      */
     fun getCurrentBssid(): String? {
-        val raw = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            readBssidModern()
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            normalizeBssid(readBssidModern()) ?: normalizeBssid(readBssidLegacy())
         } else {
-            readBssidLegacy()
+            normalizeBssid(readBssidLegacy())
         }
-        return normalizeBssid(raw)
     }
 
     private fun readBssidModern(): String? {

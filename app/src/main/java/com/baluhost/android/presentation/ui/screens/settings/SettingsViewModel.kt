@@ -50,6 +50,7 @@ class SettingsViewModel @Inject constructor(
         loadCacheStats()
         loadByteUnitMode()
         loadNetworkSettings()
+        observeWifiState()
     }
     
     private fun loadUserInfo() {
@@ -275,6 +276,14 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private fun observeWifiState() {
+        viewModelScope.launch {
+            networkMonitor.isWifiConnected.collect { onWifi ->
+                _uiState.update { it.copy(isOnWifi = onWifi) }
+            }
+        }
+    }
+
     fun setHomeNetwork() {
         viewModelScope.launch {
             val bssid = bssidReader.getCurrentBssid()
@@ -282,7 +291,12 @@ class SettingsViewModel @Inject constructor(
                 preferencesManager.saveHomeBssid(bssid)
                 _uiState.update { it.copy(homeBssidConfigured = true, error = null) }
             } else {
-                _uiState.update { it.copy(error = "Verbinde dich zuerst mit deinem Heim-WLAN") }
+                val msg = if (networkMonitor.isCurrentlyWifiConnected()) {
+                    "BSSID konnte nicht gelesen werden – prüfe die WLAN-Berechtigung"
+                } else {
+                    "Verbinde dich zuerst mit deinem Heim-WLAN"
+                }
+                _uiState.update { it.copy(error = msg) }
             }
         }
     }
