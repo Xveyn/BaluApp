@@ -10,6 +10,7 @@ import com.baluhost.android.presentation.ui.screens.detail.CpuDetailScreen
 import com.baluhost.android.presentation.ui.screens.detail.MemoryDetailScreen
 import com.baluhost.android.presentation.ui.screens.detail.PowerDetailScreen
 import com.baluhost.android.presentation.ui.screens.detail.StorageDetailScreen
+import com.baluhost.android.presentation.ui.screens.detail.UptimeDetailScreen
 import com.baluhost.android.presentation.ui.screens.lock.LockScreen
 import com.baluhost.android.presentation.ui.screens.main.MainScreen
 import com.baluhost.android.presentation.ui.screens.media.MediaViewerScreen
@@ -217,6 +218,14 @@ fun NavGraph(
 
         composable(Screen.SharesDetail.route) {
             SharesScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.UptimeDetail.route) {
+            UptimeDetailScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }
