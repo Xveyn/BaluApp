@@ -66,6 +66,7 @@ fun DashboardScreen(
     onNavigateToPowerDetail: () -> Unit = {},
     onNavigateToStorageDetail: () -> Unit = {},
     onNavigateToSharesDetail: () -> Unit = {},
+    onNavigateToUptimeDetail: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -342,7 +343,14 @@ fun DashboardScreen(
                                 icon = Icons.Default.Power,
                                 gradientColors = listOf(Color(0xFF10B981), Color(0xFF14B8A6)),
                                 isActivated = activatedCard == "uptime",
-                                onClick = { activatedCard = "uptime" },
+                                onClick = {
+                                    if (activatedCard == "uptime") {
+                                        activatedCard = null
+                                        onNavigateToUptimeDetail()
+                                    } else {
+                                        activatedCard = "uptime"
+                                    }
+                                },
                                 modifier = Modifier.weight(1f)
                             )
                         }

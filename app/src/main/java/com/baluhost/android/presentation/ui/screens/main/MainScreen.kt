@@ -85,6 +85,9 @@ fun MainScreen(
                         onNavigateToSharesDetail = {
                             parentNavController.navigate(Screen.SharesDetail.route)
                         },
+                        onNavigateToUptimeDetail = {
+                            parentNavController.navigate(Screen.UptimeDetail.route)
+                        },
                         onNavigateToNotifications = {
                             parentNavController.navigate(Screen.Notifications.route)
                         }
