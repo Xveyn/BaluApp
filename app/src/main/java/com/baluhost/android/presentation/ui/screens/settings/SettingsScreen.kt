@@ -2,7 +2,6 @@ package com.baluhost.android.presentation.ui.screens.settings
 
 import android.Manifest
 import android.content.pm.PackageManager
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -67,11 +66,7 @@ fun SettingsScreen(
         }
     }
     var showBssidRationale by remember { mutableStateOf(false) }
-    val bssidPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        Manifest.permission.NEARBY_WIFI_DEVICES
-    } else {
-        Manifest.permission.ACCESS_FINE_LOCATION
-    }
+    val bssidPermission = Manifest.permission.ACCESS_FINE_LOCATION
 
     // Handle successful deletion - navigate to splash for re-onboarding
     LaunchedEffect(uiState.deviceDeleted) {
@@ -383,10 +378,8 @@ fun SettingsScreen(
                             ) == PackageManager.PERMISSION_GRANTED
                             if (hasPermission) {
                                 viewModel.setHomeNetwork()
-                            } else if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                showBssidRationale = true
                             } else {
-                                bssidPermissionLauncher.launch(bssidPermission)
+                                showBssidRationale = true
                             }
                         },
                         text = "Heimnetzwerk setzen",
@@ -733,7 +726,7 @@ fun SettingsScreen(
         }
     }
 
-    // BSSID permission rationale (API <= 32 only)
+    // BSSID permission rationale
     if (showBssidRationale) {
         AlertDialog(
             onDismissRequest = { showBssidRationale = false },
