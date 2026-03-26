@@ -97,6 +97,16 @@ class DashboardViewModel @Inject constructor(
     private val _snackbarEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
 
+    sealed class VpnAction {
+        object AutoConnect : VpnAction()
+        object ShowPrompt : VpnAction()
+    }
+
+    private val _vpnActionEvent = MutableSharedFlow<VpnAction>(extraBufferCapacity = 1)
+    val vpnActionEvent: SharedFlow<VpnAction> = _vpnActionEvent.asSharedFlow()
+
+    private var vpnPromptShown = false
+
     private var pollingJob: kotlinx.coroutines.Job? = null
     
     init {
@@ -315,9 +325,21 @@ class DashboardViewModel @Inject constructor(
             preferencesManager.getServerUrl().collectLatest { serverUrl ->
                 if (serverUrl != null) {
                     networkStateManager.observeHomeNetworkStatus(serverUrl)
-                        .collect { isHome -> 
+                        .collect { isHome ->
                             _isInHomeNetwork.value = isHome
-                                _isVpnActive.value = networkStateManager.isVpnActive()
+                            _isVpnActive.value = networkStateManager.isVpnActive()
+
+                            // Trigger VPN action when external detected
+                            if (isHome == false && !networkStateManager.isVpnActive() && !vpnPromptShown) {
+                                val autoVpn = preferencesManager.isAutoVpnOnExternal().first()
+                                if (autoVpn) {
+                                    _vpnActionEvent.tryEmit(VpnAction.AutoConnect)
+                                    // Don't set vpnPromptShown — if auto-connect fails, user can still be prompted
+                                } else {
+                                    _vpnActionEvent.tryEmit(VpnAction.ShowPrompt)
+                                    vpnPromptShown = true // Only guard prompt, not auto-connect
+                                }
+                            }
                         }
                 }
             }

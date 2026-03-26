@@ -1,5 +1,9 @@
 package com.baluhost.android.presentation.ui.screens.settings
 
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -15,9 +19,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
@@ -50,6 +56,17 @@ fun SettingsScreen(
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinSetupError by remember { mutableStateOf<String?>(null) }
+
+    // BSSID permission for "Set Home Network"
+    val bssidPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.setHomeNetwork()
+        }
+    }
+    var showBssidRationale by remember { mutableStateOf(false) }
+    val bssidPermission = Manifest.permission.ACCESS_FINE_LOCATION
 
     // Handle successful deletion - navigate to splash for re-onboarding
     LaunchedEffect(uiState.deviceDeleted) {
@@ -324,6 +341,93 @@ fun SettingsScreen(
                             imageVector = Icons.Default.ChevronRight,
                             contentDescription = "Öffnen",
                             tint = Sky400
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Network Settings Card
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    intensity = GlassIntensity.Medium
+                ) {
+                    Text(
+                        text = "NETZWERK",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate500,
+                        letterSpacing = 2.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Home network status
+                    InfoRow(
+                        label = "Heimnetzwerk",
+                        value = if (uiState.homeBssidConfigured) "Konfiguriert" else "Nicht konfiguriert"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val context = LocalContext.current
+                    GradientButton(
+                        onClick = {
+                            // Check if permission is already granted
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context, bssidPermission
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                viewModel.setHomeNetwork()
+                            } else {
+                                showBssidRationale = true
+                            }
+                        },
+                        text = "Heimnetzwerk setzen",
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = uiState.isOnWifi
+                    )
+
+                    if (!uiState.isOnWifi) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Verbinde dich mit deinem Heim-WLAN um das Netzwerk zu setzen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate400
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Slate700.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto-VPN toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-VPN wenn extern",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "VPN automatisch verbinden wenn nicht im Heimnetzwerk",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate400
+                            )
+                        }
+                        Switch(
+                            checked = uiState.autoVpnOnExternal,
+                            onCheckedChange = { viewModel.toggleAutoVpn(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Sky400,
+                                checkedTrackColor = Slate800,
+                                uncheckedThumbColor = Slate400,
+                                uncheckedTrackColor = Slate800
+                            )
                         )
                     }
                 }
@@ -620,6 +724,34 @@ fun SettingsScreen(
                 duration = SnackbarDuration.Short
             )
         }
+    }
+
+    // BSSID permission rationale
+    if (showBssidRationale) {
+        AlertDialog(
+            onDismissRequest = { showBssidRationale = false },
+            title = { Text("WLAN-Erkennung") },
+            text = {
+                Text(
+                    "BaluApp möchte dein Heimnetzwerk (WLAN) erkennen, um automatisch " +
+                    "die richtige Verbindung zu wählen. Dazu wird einmalig der " +
+                    "WLAN-Zugangspunkt identifiziert. Dein Standort wird nicht " +
+                    "gespeichert oder übertragen."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBssidRationale = false
+                    bssidPermissionLauncher.launch(bssidPermission)
+                }) { Text("Weiter") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBssidRationale = false }) {
+                    Text("Überspringen")
+                }
+            },
+            containerColor = Slate900
+        )
     }
 }
 

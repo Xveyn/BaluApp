@@ -37,7 +37,11 @@ class PreferencesManager @Inject constructor(
     private val deviceIdKey = stringPreferencesKey("device_id")
     private val onboardingCompletedKey = stringPreferencesKey("onboarding_completed")
     private val byteUnitModeKey = stringPreferencesKey("byte_unit_mode")
-    
+    private val homeBssidKey = stringPreferencesKey("home_bssid")
+    // Project convention: booleans stored as "true"/"false" strings via stringPreferencesKey
+    // (same as vpnConnectedKey, autoVpnForSync, etc.) — NOT booleanPreferencesKey
+    private val autoVpnOnExternalKey = stringPreferencesKey("auto_vpn_on_external")
+
     // Access Token (delegated to SecurePreferencesManager for encryption)
     suspend fun saveAccessToken(token: String) {
         securePreferences.saveAccessToken(token)
@@ -496,6 +500,34 @@ class PreferencesManager @Inject constructor(
         return dataStore.data.map { prefs ->
             val mac = prefs[stringPreferencesKey("fritzbox_mac")] ?: ""
             mac.isNotEmpty()
+        }
+    }
+
+    // Home BSSID (for home network detection)
+    suspend fun saveHomeBssid(bssid: String) {
+        dataStore.edit { prefs -> prefs[homeBssidKey] = bssid.uppercase() }
+    }
+
+    fun getHomeBssid(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[homeBssidKey] }
+    }
+
+    suspend fun getHomeBssidOnce(): String? {
+        return dataStore.data.map { prefs -> prefs[homeBssidKey] }.first()
+    }
+
+    suspend fun clearHomeBssid() {
+        dataStore.edit { prefs -> prefs.remove(homeBssidKey) }
+    }
+
+    // Auto-VPN when external network detected
+    suspend fun saveAutoVpnOnExternal(enabled: Boolean) {
+        dataStore.edit { prefs -> prefs[autoVpnOnExternalKey] = enabled.toString() }
+    }
+
+    fun isAutoVpnOnExternal(): Flow<Boolean> {
+        return dataStore.data.map { prefs ->
+            prefs[autoVpnOnExternalKey]?.toBoolean() ?: false
         }
     }
 

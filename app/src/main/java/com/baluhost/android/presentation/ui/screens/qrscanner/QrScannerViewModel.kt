@@ -2,10 +2,12 @@ package com.baluhost.android.presentation.ui.screens.qrscanner
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.dto.RegistrationQrData
 import com.baluhost.android.domain.model.AuthResult
 import com.baluhost.android.domain.usecase.auth.RegisterDeviceUseCase
 import com.baluhost.android.domain.usecase.vpn.ImportVpnConfigUseCase
+import com.baluhost.android.util.BssidReader
 import com.baluhost.android.util.Result
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
@@ -24,7 +26,9 @@ import javax.inject.Inject
 @HiltViewModel
 class QrScannerViewModel @Inject constructor(
     private val registerDeviceUseCase: RegisterDeviceUseCase,
-    private val importVpnConfigUseCase: ImportVpnConfigUseCase
+    private val importVpnConfigUseCase: ImportVpnConfigUseCase,
+    private val bssidReader: BssidReader,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow<QrScannerState>(QrScannerState.Scanning)
@@ -89,6 +93,26 @@ class QrScannerViewModel @Inject constructor(
     fun resetScanner() {
         _uiState.value = QrScannerState.Scanning
     }
+
+    fun captureHomeBssid() {
+        viewModelScope.launch {
+            val bssid = bssidReader.getCurrentBssid()
+            if (bssid != null) {
+                preferencesManager.saveHomeBssid(bssid)
+                android.util.Log.d("QrScanner", "Home BSSID captured: $bssid")
+            } else {
+                android.util.Log.d("QrScanner", "No BSSID available — falling back to subnet detection")
+            }
+            markBssidCaptureCompleted()
+        }
+    }
+
+    fun markBssidCaptureCompleted() {
+        val current = _uiState.value
+        if (current is QrScannerState.Success) {
+            _uiState.value = current.copy(bssidCaptureCompleted = true)
+        }
+    }
 }
 
 sealed class QrScannerState {
@@ -96,7 +120,8 @@ sealed class QrScannerState {
     object Processing : QrScannerState()
     data class Success(
         val authResult: AuthResult,
-        val vpnConfigured: Boolean = false
+        val vpnConfigured: Boolean = false,
+        val bssidCaptureCompleted: Boolean = false
     ) : QrScannerState()
     data class Error(val message: String) : QrScannerState()
 }
