@@ -41,3 +41,51 @@ data class MemoryHistoryResponseDto(
     @SerializedName("source")
     val source: String
 )
+
+data class UptimeSampleDto(
+    @SerializedName("timestamp")
+    val timestamp: String,
+    @SerializedName("server_uptime_seconds")
+    val serverUptimeSeconds: Long,
+    @SerializedName("system_uptime_seconds")
+    val systemUptimeSeconds: Long,
+    @SerializedName("server_start_time")
+    val serverStartTime: String,
+    @SerializedName("system_boot_time")
+    val systemBootTime: String
+)
+
+data class SleepEventDto(
+    @SerializedName("timestamp")
+    val timestamp: String,
+    @SerializedName("previous_state")
+    val previousState: String,
+    @SerializedName("new_state")
+    val newState: String,
+    @SerializedName("duration_seconds")
+    val durationSeconds: Double?
+)
+
+data class CurrentUptimeResponseDto(
+    @SerializedName("timestamp")
+    val timestamp: String,
+    @SerializedName("server_uptime_seconds")
+    val serverUptimeSeconds: Long,
+    @SerializedName("system_uptime_seconds")
+    val systemUptimeSeconds: Long,
+    @SerializedName("server_start_time")
+    val serverStartTime: String,
+    @SerializedName("system_boot_time")
+    val systemBootTime: String
+)
+
+data class UptimeHistoryResponseDto(
+    @SerializedName("samples")
+    val samples: List<UptimeSampleDto>,
+    @SerializedName("sleep_events")
+    val sleepEvents: List<SleepEventDto>,
+    @SerializedName("sample_count")
+    val sampleCount: Int,
+    @SerializedName("source")
+    val source: String
+)
