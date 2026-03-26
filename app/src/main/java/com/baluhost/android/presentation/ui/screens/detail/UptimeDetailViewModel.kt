@@ -51,6 +51,7 @@ class UptimeDetailViewModel @Inject constructor(
     fun selectTimeRange(timeRange: String) {
         _uiState.value = _uiState.value.copy(selectedTimeRange = timeRange)
         loadData()
+        startPolling()
     }
 
     private fun loadData() {

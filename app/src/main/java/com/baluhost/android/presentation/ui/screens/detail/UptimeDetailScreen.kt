@@ -300,6 +300,23 @@ fun UptimeDetailScreen(
                         )
                     }
 
+                    // Error display
+                    uiState.error?.let { error ->
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            color = Red500.copy(alpha = 0.1f),
+                            border = BorderStroke(1.dp, Red500.copy(alpha = 0.3f))
+                        ) {
+                            Text(
+                                text = error,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Red400,
+                                modifier = Modifier.padding(12.dp)
+                            )
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
