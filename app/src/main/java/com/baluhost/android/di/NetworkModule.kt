@@ -18,6 +18,7 @@ import com.baluhost.android.data.remote.interceptors.AuthInterceptor
 import com.baluhost.android.data.remote.interceptors.DynamicBaseUrlInterceptor
 import com.baluhost.android.data.remote.interceptors.ErrorInterceptor
 import com.baluhost.android.util.Constants
+import com.baluhost.android.util.BssidReader
 import com.baluhost.android.util.NetworkMonitor
 import com.baluhost.android.util.NetworkStateManager
 import dagger.Module
@@ -195,8 +196,10 @@ object NetworkModule {
     @Singleton
     fun provideNetworkStateManager(
         @ApplicationContext context: Context,
-        networkMonitor: NetworkMonitor
+        networkMonitor: NetworkMonitor,
+        bssidReader: BssidReader,
+        preferencesManager: PreferencesManager
     ): NetworkStateManager {
-        return NetworkStateManager(context, networkMonitor)
+        return NetworkStateManager(context, networkMonitor, bssidReader, preferencesManager)
     }
 }

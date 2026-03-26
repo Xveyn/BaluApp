@@ -4,10 +4,15 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkProperties
 import android.net.NetworkCapabilities
+import com.baluhost.android.data.local.datastore.PreferencesManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import java.net.Inet4Address
 import java.net.InetAddress
 import java.net.NetworkInterface
@@ -20,55 +25,78 @@ import java.net.NetworkInterface
  */
 class NetworkStateManager(
     private val context: Context,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val bssidReader: BssidReader,
+    preferencesManager: PreferencesManager
 ) {
     private val connectivityManager =
         context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+
+    @Volatile
+    private var cachedHomeBssid: String? = null
+
+    init {
+        scope.launch {
+            preferencesManager.getHomeBssid().collect { cachedHomeBssid = it }
+        }
+    }
+
     private val _isInHomeNetwork = MutableStateFlow<Boolean?>(null)
     val isInHomeNetwork: Flow<Boolean?> = _isInHomeNetwork.asStateFlow()
-    
+
     private var cachedServerUrl: String? = null
     private var lastCheckTime: Long = 0
     private val CACHE_DURATION_MS = 30_000L // 30 seconds
     
     /**
-     * Check if device is in same network as NAS server.
-     * 
-     * @param serverUrl NAS server URL (e.g., "http://192.168.178.21:8000")
-     * @return true if in home network, false if outside, null if unknown
+     * Check whether the device is on the home network via BSSID match or subnet comparison.
+     *
+     * IMPORTANT: This method does NOT check VPN or WiFi state. It is designed to be called
+     * from [observeHomeNetworkStatus], which guards with VPN-active and WiFi-connected checks
+     * before invoking this method. Do not call directly without those guards.
      */
     fun checkHomeNetworkStatus(serverUrl: String): Boolean? {
         cachedServerUrl = serverUrl
-        
-        // Cache check to avoid frequent network calls
         val now = System.currentTimeMillis()
+
+        // BSSID check — instant, bypasses 30s cache
+        val currentBssid = bssidReader.getCurrentBssid()
+        val storedBssid = cachedHomeBssid
+        if (currentBssid != null && storedBssid != null) {
+            val isHomeBssid = currentBssid == storedBssid
+            _isInHomeNetwork.value = isHomeBssid
+            lastCheckTime = now
+            return isHomeBssid
+        }
+        // BSSID inconclusive (null current or null stored) — fall through to subnet
+
+        // Cache check — only for subnet fallback path (avoids frequent network lookups)
         if (now - lastCheckTime < CACHE_DURATION_MS && _isInHomeNetwork.value != null) {
             return _isInHomeNetwork.value
         }
-        
+
+        // Subnet comparison (existing fallback logic)
         val isHome = try {
             val nasIp = extractIpFromUrl(serverUrl)
             if (nasIp == null) {
-                // Server URL doesn't contain IP (might be domain name)
-                // Assume we're NOT in home network for safety
                 false
             } else {
                 val deviceIp = getCurrentLocalIp()
                 if (deviceIp == null) {
-                    // Can't determine device IP
                     null
                 } else {
                     isSameSubnet(nasIp, deviceIp)
                 }
             }
         } catch (e: Exception) {
-            null // Unknown state
+            null
         }
-        
+
         _isInHomeNetwork.value = isHome
         lastCheckTime = now
-        
+
         return isHome
     }
     
