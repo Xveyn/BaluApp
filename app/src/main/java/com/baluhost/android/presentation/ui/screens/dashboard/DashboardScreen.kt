@@ -45,6 +45,7 @@ import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.NotificationBell
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
 import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.presentation.ui.screens.vpn.VpnViewModel
 import com.baluhost.android.presentation.ui.theme.*
 import kotlinx.coroutines.delay
@@ -69,6 +70,7 @@ fun DashboardScreen(
     onNavigateToSharesDetail: () -> Unit = {},
     onNavigateToUptimeDetail: () -> Unit = {},
     onNavigateToNotifications: () -> Unit = {},
+    onNavigateToFritzBoxSettings: () -> Unit = {},
     vpnViewModel: VpnViewModel = hiltViewModel(),
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
@@ -83,6 +85,7 @@ fun DashboardScreen(
     val isAdmin by viewModel.isAdmin.collectAsState()
     val powerActionInProgress by viewModel.powerActionInProgress.collectAsState()
     val nasStatus by viewModel.nasStatus.collectAsState()
+    val wolAvailability by viewModel.wolAvailability.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -251,9 +254,11 @@ fun DashboardScreen(
                         uptimeSeconds = uiState.telemetry?.uptime?.toLong(),
                         isAdmin = isAdmin,
                         isActionInProgress = powerActionInProgress,
+                        wolAvailability = wolAvailability,
                         onSendWol = { viewModel.sendWol() },
                         onSendSoftSleep = { viewModel.sendSoftSleep() },
-                        onSendSuspend = { viewModel.sendSuspend() }
+                        onSendSuspend = { viewModel.sendSuspend() },
+                        onNavigateToFritzBoxSettings = onNavigateToFritzBoxSettings
                     )
 
                     // System Metrics Grid - 2x2 layout like webapp
@@ -887,9 +892,11 @@ private fun ServerStatusStrip(
     uptimeSeconds: Long?,
     isAdmin: Boolean,
     isActionInProgress: Boolean,
+    wolAvailability: WolAvailability,
     onSendWol: () -> Unit,
     onSendSoftSleep: () -> Unit,
-    onSendSuspend: () -> Unit
+    onSendSuspend: () -> Unit,
+    onNavigateToFritzBoxSettings: () -> Unit
 ) {
     var showPowerDialog by remember { mutableStateOf(false) }
     var confirmAction by remember { mutableStateOf<PowerAction?>(null) }
@@ -1020,11 +1027,62 @@ private fun ServerStatusStrip(
                             )
                         }
                         else -> {
-                            Text(
-                                text = "Server nicht erreichbar",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Slate400
-                            )
+                            when (wolAvailability) {
+                                WolAvailability.AVAILABLE -> {
+                                    PowerOptionButton(
+                                        icon = Icons.Default.WbSunny,
+                                        label = "NAS aufwecken",
+                                        description = "Wake-on-LAN über Fritz!Box",
+                                        color = Green500,
+                                        onClick = {
+                                            showPowerDialog = false
+                                            confirmAction = PowerAction.WOL
+                                        }
+                                    )
+                                }
+                                WolAvailability.FRITZ_BOX_ERROR -> {
+                                    Text(
+                                        text = "Fritz!Box nicht erreichbar",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Orange500
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            showPowerDialog = false
+                                            onNavigateToFritzBoxSettings()
+                                        }
+                                    ) {
+                                        Text(
+                                            "Konfiguration prüfen",
+                                            color = Sky400
+                                        )
+                                    }
+                                }
+                                WolAvailability.CHECKING -> {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            color = Sky400,
+                                            strokeWidth = 2.dp
+                                        )
+                                        Text(
+                                            text = "Status wird geprüft...",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = Slate400
+                                        )
+                                    }
+                                }
+                                else -> {
+                                    Text(
+                                        text = "Server nicht erreichbar",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Slate400
+                                    )
+                                }
+                            }
                         }
                     }
                 }
