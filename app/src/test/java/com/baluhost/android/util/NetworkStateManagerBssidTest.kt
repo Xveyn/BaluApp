@@ -87,4 +87,36 @@ class NetworkStateManagerBssidTest {
         val result = manager.checkHomeNetworkStatus("http://192.168.1.100:3000")
         // Should fall through to subnet -- no crash
     }
+
+    @Test
+    fun `isOnHomeNetworkByBssid returns true when BSSID matches`() {
+        every { bssidReader.getCurrentBssid() } returns "AA:BB:CC:DD:EE:FF"
+        val manager = createManager(storedBssid = "AA:BB:CC:DD:EE:FF")
+
+        assertTrue(manager.isOnHomeNetworkByBssid())
+    }
+
+    @Test
+    fun `isOnHomeNetworkByBssid returns false when BSSID does not match`() {
+        every { bssidReader.getCurrentBssid() } returns "11:22:33:44:55:66"
+        val manager = createManager(storedBssid = "AA:BB:CC:DD:EE:FF")
+
+        assertFalse(manager.isOnHomeNetworkByBssid())
+    }
+
+    @Test
+    fun `isOnHomeNetworkByBssid returns false when current BSSID is null`() {
+        every { bssidReader.getCurrentBssid() } returns null
+        val manager = createManager(storedBssid = "AA:BB:CC:DD:EE:FF")
+
+        assertFalse(manager.isOnHomeNetworkByBssid())
+    }
+
+    @Test
+    fun `isOnHomeNetworkByBssid returns false when stored BSSID is null`() {
+        every { bssidReader.getCurrentBssid() } returns "AA:BB:CC:DD:EE:FF"
+        val manager = createManager(storedBssid = null)
+
+        assertFalse(manager.isOnHomeNetworkByBssid())
+    }
 }
