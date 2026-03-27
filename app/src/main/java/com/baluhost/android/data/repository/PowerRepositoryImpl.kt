@@ -4,6 +4,7 @@ import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.network.FritzBoxTR064Client
 import com.baluhost.android.data.network.WolResult
 import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.data.remote.api.SleepApi
 import com.baluhost.android.domain.repository.PowerRepository
 import com.baluhost.android.util.Result
@@ -70,10 +71,10 @@ class PowerRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun checkNasStatus(): NasStatus {
+    override suspend fun checkNasStatus(): NasStatusResult {
         return try {
             val mac = preferencesManager.getFritzBoxMacAddress().first()
-            if (mac.isEmpty()) return NasStatus.UNKNOWN
+            if (mac.isEmpty()) return NasStatusResult.FritzBoxNotConfigured
 
             val host = preferencesManager.getFritzBoxHost().first()
             val port = preferencesManager.getFritzBoxPort().first()
@@ -81,15 +82,19 @@ class PowerRepositoryImpl @Inject constructor(
             val password = preferencesManager.getFritzBoxPassword() ?: ""
 
             when (val result = fritzBoxClient.checkHostActive(host, port, username, password, mac)) {
-                is WolResult.Success -> NasStatus.ONLINE
+                is WolResult.Success -> NasStatusResult.Resolved(NasStatus.ONLINE)
                 is WolResult.Error -> {
-                    if (result.message == "inactive") NasStatus.SLEEPING else NasStatus.OFFLINE
+                    if (result.message == "inactive") {
+                        NasStatusResult.Resolved(NasStatus.SLEEPING)
+                    } else {
+                        NasStatusResult.Resolved(NasStatus.OFFLINE)
+                    }
                 }
-                is WolResult.AuthError -> NasStatus.OFFLINE
-                is WolResult.Unreachable -> NasStatus.OFFLINE
+                is WolResult.AuthError -> NasStatusResult.FritzBoxAuthError
+                is WolResult.Unreachable -> NasStatusResult.FritzBoxUnreachable
             }
         } catch (e: Exception) {
-            NasStatus.OFFLINE
+            NasStatusResult.FritzBoxUnreachable
         }
     }
 }

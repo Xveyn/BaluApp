@@ -25,6 +25,8 @@ import com.baluhost.android.domain.usecase.shares.GetShareStatisticsUseCase
 import com.baluhost.android.domain.usecase.system.GetSmartStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
 import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.model.NasStatusResult
+import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
 import com.baluhost.android.domain.usecase.power.SendWolUseCase
 import com.baluhost.android.domain.usecase.power.SendSoftSleepUseCase
@@ -94,6 +96,9 @@ class DashboardViewModel @Inject constructor(
     private val _powerActionInProgress = MutableStateFlow(false)
     val powerActionInProgress: StateFlow<Boolean> = _powerActionInProgress.asStateFlow()
 
+    private val _wolAvailability = MutableStateFlow(WolAvailability.NOT_NEEDED)
+    val wolAvailability: StateFlow<WolAvailability> = _wolAvailability.asStateFlow()
+
     private val _snackbarEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
 
@@ -136,12 +141,12 @@ class DashboardViewModel @Inject constructor(
     private fun loadDashboardData() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            
+
             try {
                 // Load username
                 val username = preferencesManager.getUsername().first() ?: "User"
-                
-                // Load system telemetry
+
+                // Load system telemetry first — if server is down, skip remaining API calls
                 val telemetryResult = getSystemTelemetryUseCase()
                 val telemetry = when (telemetryResult) {
                     is Result.Success -> {
@@ -156,8 +161,20 @@ class DashboardViewModel @Inject constructor(
                     }
                     else -> null
                 }
-                
-                // Load RAID status
+
+                // If telemetry failed, server is unreachable — check NAS status via Fritz!Box and skip rest
+                if (telemetry == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        username = username,
+                        telemetry = null,
+                        error = null
+                    )
+                    updateNasStatus(false)
+                    return@launch
+                }
+
+                // Server is online — load remaining data
                 val raidResult = getRaidStatusUseCase()
                 val raidArrays = when (raidResult) {
                     is Result.Success -> {
@@ -170,7 +187,7 @@ class DashboardViewModel @Inject constructor(
                     }
                     else -> emptyList()
                 }
-                
+
                 // Load SMART status
                 val smartResult = getSmartStatusUseCase()
                 val smartDevices = when (smartResult) {
@@ -247,7 +264,7 @@ class DashboardViewModel @Inject constructor(
                     error = null
                 )
 
-                updateNasStatus(telemetry != null)
+                updateNasStatus(true)
                 loadSyncFolders()
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
@@ -262,14 +279,20 @@ class DashboardViewModel @Inject constructor(
     private fun loadTelemetryData() {
         viewModelScope.launch {
             try {
-                // Only reload telemetry and RAID status, not files
+                // Check telemetry first — if server is down, skip remaining and check Fritz!Box
                 val telemetryResult = getSystemTelemetryUseCase()
                 val telemetry = when (telemetryResult) {
                     is Result.Success -> telemetryResult.data
                     is Result.Error -> null
                     else -> null
                 }
-                
+
+                if (telemetry == null) {
+                    _uiState.value = _uiState.value.copy(telemetry = null)
+                    updateNasStatus(false)
+                    return@launch
+                }
+
                 val raidResult = getRaidStatusUseCase()
                 val raidArrays = when (raidResult) {
                     is Result.Success -> raidResult.data
@@ -305,7 +328,7 @@ class DashboardViewModel @Inject constructor(
                     smartDevices = smartDevices,
                     shareStats = shareStats
                 )
-                updateNasStatus(telemetry != null)
+                updateNasStatus(true)
             } catch (e: Exception) {
                 Log.e("DashboardViewModel", "Failed to poll telemetry", e)
                 updateNasStatus(false)
@@ -387,9 +410,34 @@ class DashboardViewModel @Inject constructor(
     private suspend fun updateNasStatus(telemetrySuccess: Boolean) {
         if (telemetrySuccess) {
             _nasStatus.value = NasStatus.ONLINE
+            _wolAvailability.value = WolAvailability.NOT_NEEDED
         } else {
-            val status = checkNasStatusUseCase()
-            _nasStatus.value = status
+            _wolAvailability.value = WolAvailability.CHECKING
+            when (val result = checkNasStatusUseCase()) {
+                is NasStatusResult.Resolved -> {
+                    _nasStatus.value = result.status
+                    _wolAvailability.value = when (result.status) {
+                        NasStatus.ONLINE, NasStatus.SLEEPING -> WolAvailability.NOT_NEEDED
+                        NasStatus.OFFLINE, NasStatus.UNKNOWN -> {
+                            if (networkStateManager.isOnHomeNetworkByBssid()) {
+                                WolAvailability.AVAILABLE
+                            } else {
+                                WolAvailability.NOT_ON_HOME_NETWORK
+                            }
+                        }
+                    }
+                }
+                is NasStatusResult.FritzBoxUnreachable,
+                is NasStatusResult.FritzBoxAuthError,
+                is NasStatusResult.FritzBoxNotConfigured -> {
+                    _nasStatus.value = NasStatus.OFFLINE
+                    _wolAvailability.value = if (networkStateManager.isOnHomeNetworkByBssid()) {
+                        WolAvailability.FRITZ_BOX_ERROR
+                    } else {
+                        WolAvailability.NOT_ON_HOME_NETWORK
+                    }
+                }
+            }
         }
     }
 
@@ -403,6 +451,7 @@ class DashboardViewModel @Inject constructor(
             }
             _powerActionInProgress.value = false
             _nasStatus.value = NasStatus.UNKNOWN
+            _wolAvailability.value = WolAvailability.NOT_NEEDED
         }
     }
 
