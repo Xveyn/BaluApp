@@ -101,9 +101,19 @@ class NetworkStateManager(
     }
     
     /**
+     * Check if device is on home network using BSSID only.
+     * Does NOT check VPN or subnet. Returns false if either BSSID is unavailable.
+     */
+    fun isOnHomeNetworkByBssid(): Boolean {
+        val current = bssidReader.getCurrentBssid() ?: return false
+        val stored = cachedHomeBssid ?: return false
+        return current == stored
+    }
+
+    /**
      * Reactive flow that emits network status changes.
      * Combines WiFi state with home network check.
-     * 
+     *
      * Returns true if in home network OR connected via VPN.
      */
     fun observeHomeNetworkStatus(serverUrl: String): Flow<Boolean?> {
