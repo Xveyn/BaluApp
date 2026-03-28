@@ -2,7 +2,7 @@ package com.baluhost.android.util
 
 object Constants {
     // Network
-    const val CONNECT_TIMEOUT = 15L // seconds
+    const val CONNECT_TIMEOUT = 5L // seconds
     const val READ_TIMEOUT = 120L // seconds - large file transfers need time
     const val WRITE_TIMEOUT = 300L // seconds - large uploads over mobile
     
