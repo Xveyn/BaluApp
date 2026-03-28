@@ -42,27 +42,47 @@ class VpnViewModel @Inject constructor(
     val uiState: StateFlow<VpnUiState> = _uiState.asStateFlow()
     
     init {
-        loadVpnConfig()
-        loadAvailableTypes()
+        initialize()
         checkVpnStatus()
         startVpnStatusMonitoring()
+    }
+
+    private fun initialize() {
+        viewModelScope.launch {
+            // Load types first so we know which type to fetch config for
+            loadAvailableTypesAndThenConfig()
+        }
     }
     
     /**
      * Load VPN configuration from backend or cache.
+     * Respects the saved VPN type (e.g. "fritzbox" vs "wireguard").
      */
     private fun loadVpnConfig() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            
-            Log.d(TAG, "Loading VPN config")
-            val result = fetchVpnConfigUseCase()
-            
+
+            val savedType = preferencesManager.getVpnType().first()
+            Log.d(TAG, "Loading VPN config (type=$savedType)")
+
+            // Cache first — avoids network call when offline/on mobile
+            val cachedConfig = vpnRepository.getCachedVpnConfig()
+            val result = if (cachedConfig != null) {
+                Log.d(TAG, "Using cached VPN config")
+                Result.Success(cachedConfig)
+            } else if (!savedType.isNullOrEmpty()) {
+                Log.d(TAG, "No cache, fetching config by type=$savedType")
+                vpnRepository.fetchVpnConfigByType(savedType)
+            } else {
+                Log.d(TAG, "No cache, no type, using generic fetch")
+                fetchVpnConfigUseCase()
+            }
+
             when (result) {
                 is Result.Success -> {
                     val config = result.data
                     Log.d(TAG, "VPN config loaded: ${config.deviceName}")
-                    
+
                     // Extract endpoint from config
                     var endpoint: String? = null
                     try {
@@ -76,7 +96,7 @@ class VpnViewModel @Inject constructor(
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to parse endpoint", e)
                     }
-                    
+
                     _uiState.value = _uiState.value.copy(
                         hasConfig = true,
                         serverEndpoint = endpoint ?: config.assignedIp,
@@ -88,10 +108,10 @@ class VpnViewModel @Inject constructor(
                 }
                 is Result.Error -> {
                     Log.e(TAG, "Failed to load VPN config", result.exception)
-                    
+
                     // Try to load from local cache
                     checkVpnConfig()
-                    
+
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = "Konfiguration konnte nicht geladen werden: ${result.exception.message}"
@@ -194,28 +214,35 @@ class VpnViewModel @Inject constructor(
     }
     
     /**
-     * Load available VPN config types from backend.
+     * Load available VPN types, ensure a type is saved, then load config.
      */
-    private fun loadAvailableTypes() {
-        viewModelScope.launch {
-            // Load saved type preference
-            val savedType = preferencesManager.getVpnType().first()
-            _uiState.value = _uiState.value.copy(selectedType = savedType)
+    private suspend fun loadAvailableTypesAndThenConfig() {
+        // Load saved type preference
+        var savedType = preferencesManager.getVpnType().first()
+        _uiState.value = _uiState.value.copy(selectedType = savedType)
 
-            when (val result = vpnRepository.getAvailableVpnTypes()) {
-                is Result.Success -> {
-                    Log.d(TAG, "Available VPN types: ${result.data}")
-                    _uiState.value = _uiState.value.copy(
-                        availableTypes = result.data,
-                        selectedType = savedType ?: result.data.firstOrNull()
-                    )
+        when (val result = vpnRepository.getAvailableVpnTypes()) {
+            is Result.Success -> {
+                Log.d(TAG, "Available VPN types: ${result.data}")
+                val effectiveType = savedType ?: result.data.firstOrNull()
+                _uiState.value = _uiState.value.copy(
+                    availableTypes = result.data,
+                    selectedType = effectiveType
+                )
+                // Persist default type so future loads use it
+                if (savedType == null && effectiveType != null) {
+                    preferencesManager.saveVpnType(effectiveType)
+                    savedType = effectiveType
                 }
-                is Result.Error -> {
-                    Log.e(TAG, "Failed to load VPN types", result.exception)
-                }
-                is Result.Loading -> {}
             }
+            is Result.Error -> {
+                Log.e(TAG, "Failed to load VPN types", result.exception)
+            }
+            is Result.Loading -> {}
         }
+
+        // Now load config with the resolved type
+        loadVpnConfig()
     }
 
     /**
@@ -272,14 +299,85 @@ class VpnViewModel @Inject constructor(
 
     /**
      * Refresh VPN configuration from backend.
+     * Only clears old cache after new config is successfully fetched.
      */
     fun refreshConfig() {
-        loadVpnConfig()
-        loadAvailableTypes()
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+
+            var savedType = preferencesManager.getVpnType().first()
+
+            // Load available types
+            when (val result = vpnRepository.getAvailableVpnTypes()) {
+                is Result.Success -> {
+                    val effectiveType = savedType ?: result.data.firstOrNull()
+                    _uiState.value = _uiState.value.copy(
+                        availableTypes = result.data,
+                        selectedType = effectiveType
+                    )
+                    if (savedType == null && effectiveType != null) {
+                        preferencesManager.saveVpnType(effectiveType)
+                        savedType = effectiveType
+                    }
+                }
+                is Result.Error -> {
+                    Log.e(TAG, "Failed to load VPN types", result.exception)
+                }
+                is Result.Loading -> {}
+            }
+
+            // Fetch fresh config — old cache stays intact until new config succeeds
+            val fetchResult = if (!savedType.isNullOrEmpty()) {
+                vpnRepository.fetchVpnConfigByType(savedType)
+            } else {
+                fetchVpnConfigUseCase()
+            }
+
+            when (fetchResult) {
+                is Result.Success -> {
+                    // fetchVpnConfigByType already saved to cache via saveVpnConfig()
+                    val config = fetchResult.data
+                    var endpoint: String? = null
+                    try {
+                        for (line in config.configString.lines()) {
+                            if (line.trim().startsWith("Endpoint")) {
+                                endpoint = line.substringAfter("=").trim()
+                                break
+                            }
+                        }
+                    } catch (_: Exception) {}
+
+                    _uiState.value = _uiState.value.copy(
+                        hasConfig = true,
+                        serverEndpoint = endpoint ?: config.assignedIp,
+                        clientIp = config.assignedIp,
+                        deviceName = config.deviceName,
+                        isLoading = false,
+                        error = null
+                    )
+                }
+                is Result.Error -> {
+                    Log.e(TAG, "Refresh failed, keeping cached config", fetchResult.exception)
+                    val cached = vpnRepository.getCachedVpnConfig()
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        hasConfig = cached != null,
+                        error = if (cached != null)
+                            "Aktualisierung fehlgeschlagen, verwende gespeicherte Konfiguration"
+                        else
+                            "Server nicht erreichbar. Bitte im Heimnetzwerk VPN-Konfiguration laden."
+                    )
+                }
+                is Result.Loading -> {}
+            }
+        }
     }
     
     /**
      * Connect to VPN.
+     *
+     * GoBackend.setState(UP) blocks until the tunnel is established,
+     * so no polling is needed — the use case returns after success or failure.
      */
     fun connect() {
         if (_uiState.value.isConnected || _uiState.value.isLoading) return
@@ -293,29 +391,14 @@ class VpnViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
-            Log.d(TAG, "Initiating VPN connection")
-            val result = connectVpnUseCase()
-
-            when (result) {
+            Log.d(TAG, "Initiating VPN connection via GoBackend")
+            when (val result = connectVpnUseCase()) {
                 is Result.Success -> {
-                    Log.d(TAG, "VPN service started, waiting for tunnel...")
-                    // Poll for VPN status — the service needs time to start,
-                    // build the TUN interface, and complete the WireGuard handshake.
-                    var connected = false
-                    for (attempt in 1..10) {
-                        delay(1000)
-                        if (isVpnActive()) {
-                            connected = true
-                            Log.d(TAG, "VPN active after ${attempt}s")
-                            break
-                        }
-                        Log.d(TAG, "VPN not active yet (attempt $attempt/10)")
-                    }
-
+                    Log.d(TAG, "VPN tunnel established")
                     _uiState.value = _uiState.value.copy(
-                        isConnected = connected,
+                        isConnected = true,
                         isLoading = false,
-                        error = if (!connected) "VPN konnte nicht gestartet werden — prüfe Logcat" else null
+                        error = null
                     )
                 }
                 is Result.Error -> {
@@ -326,9 +409,7 @@ class VpnViewModel @Inject constructor(
                         error = "Verbindung fehlgeschlagen: ${result.exception.message}"
                     )
                 }
-                is Result.Loading -> {
-                    // Connection loading
-                }
+                is Result.Loading -> {}
             }
         }
     }

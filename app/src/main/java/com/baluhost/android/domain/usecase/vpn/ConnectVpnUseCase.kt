@@ -1,39 +1,46 @@
 package com.baluhost.android.domain.usecase.vpn
 
-import android.content.Context
-import android.content.Intent
+import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
-import com.baluhost.android.service.vpn.BaluHostVpnService
+import com.baluhost.android.service.vpn.VpnConnectionManager
+import com.baluhost.android.service.vpn.VpnNotAuthorizedException
 import com.baluhost.android.util.Result
-import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 /**
  * Use case for connecting to VPN.
  *
- * Starts the VPN service with stored configuration.
+ * Uses GoBackend via VpnConnectionManager for a stable, non-reflection-based
+ * WireGuard tunnel setup.
  */
 class ConnectVpnUseCase @Inject constructor(
-    @ApplicationContext private val context: Context,
+    private val vpnConnectionManager: VpnConnectionManager,
     private val preferencesManager: PreferencesManager
 ) {
 
-    suspend operator fun invoke(): Result<Boolean> {
-        return try {
+    suspend operator fun invoke(): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
             val vpnConfig = preferencesManager.getVpnConfig().first()
-                ?: return Result.Error(Exception("No VPN configuration found"))
+                ?: return@withContext Result.Error(Exception("Keine VPN-Konfiguration gefunden"))
 
-            val intent = Intent(context, BaluHostVpnService::class.java).apply {
-                action = BaluHostVpnService.ACTION_CONNECT
-                putExtra(BaluHostVpnService.EXTRA_CONFIG, vpnConfig)
-            }
-
-            context.startForegroundService(intent)
+            Log.d(TAG, "Connecting VPN via GoBackend")
+            vpnConnectionManager.connect(vpnConfig)
+            Log.d(TAG, "VPN tunnel established")
 
             Result.Success(true)
+        } catch (e: VpnNotAuthorizedException) {
+            Log.e(TAG, "VPN not authorized", e)
+            Result.Error(e)
         } catch (e: Exception) {
-            Result.Error(Exception("Failed to start VPN: ${e.message}", e))
+            Log.e(TAG, "VPN connection failed", e)
+            Result.Error(Exception("VPN-Verbindung fehlgeschlagen: ${e.message}", e))
         }
+    }
+
+    companion object {
+        private const val TAG = "ConnectVpnUseCase"
     }
 }

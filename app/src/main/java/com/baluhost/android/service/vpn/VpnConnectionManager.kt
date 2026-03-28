@@ -41,7 +41,8 @@ class VpnConnectionManager @Inject constructor(
     fun connect(configString: String) {
         Log.d(TAG, "Starting VPN connection")
 
-        val config = Config.parse(configString.byteInputStream())
+        val sanitized = fixDoubledEndpointPort(configString)
+        val config = Config.parse(sanitized.byteInputStream())
         Log.d(TAG, "Config parsed: iface=${config.`interface`.addresses}, peers=${config.peers.size}")
 
         if (tunnel == null) {
@@ -116,6 +117,23 @@ class VpnConnectionManager @Inject constructor(
             notificationManager.notify(Constants.VPN_NOTIFICATION_ID, notification)
         } else {
             notificationManager.cancel(Constants.VPN_NOTIFICATION_ID)
+        }
+    }
+
+    /**
+     * Fix doubled port in Endpoint line (e.g. "host:58411:58411" → "host:58411").
+     */
+    private fun fixDoubledEndpointPort(config: String): String {
+        return config.lines().joinToString("\n") { line ->
+            if (line.trimStart().startsWith("Endpoint")) {
+                val regex = Regex("""(Endpoint\s*=\s*.+):(\d+):(\d+)""")
+                val match = regex.find(line)
+                if (match != null && match.groupValues[2] == match.groupValues[3]) {
+                    val fixed = "${match.groupValues[1]}:${match.groupValues[2]}"
+                    Log.w(TAG, "Fixed doubled endpoint port: ${line.trim()} → $fixed")
+                    fixed
+                } else line
+            } else line
         }
     }
 
