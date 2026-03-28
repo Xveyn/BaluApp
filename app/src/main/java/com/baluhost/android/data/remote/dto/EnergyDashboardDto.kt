@@ -2,17 +2,6 @@ package com.baluhost.android.data.remote.dto
 
 import com.google.gson.annotations.SerializedName
 
-data class CurrentPowerDto(
-    @SerializedName("device_id")
-    val deviceId: Int,
-    @SerializedName("device_name")
-    val deviceName: String,
-    @SerializedName("current_watts")
-    val currentWatts: Double,
-    @SerializedName("is_online")
-    val isOnline: Boolean
-)
-
 data class EnergyPeriodStatsDto(
     @SerializedName("device_id")
     val deviceId: Int,
