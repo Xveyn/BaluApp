@@ -13,6 +13,7 @@ import com.baluhost.android.domain.repository.VpnRepository
 import com.baluhost.android.util.Result
 import com.baluhost.android.util.WireGuardConfigParser
 import kotlinx.coroutines.flow.first
+import java.net.URI
 import javax.inject.Inject
 
 /**
@@ -35,9 +36,10 @@ class VpnRepositoryImpl @Inject constructor(
             Log.d(TAG, "No cached config, generating new VPN config from backend")
 
             val serverUrl = preferencesManager.getServerUrl().first() ?: ""
+            val publicHost = extractHostname(serverUrl)
             val deviceName = preferencesManager.getVpnDeviceName().first() ?: "Android Device"
             val response = vpnApi.generateConfig(
-                GenerateVpnConfigRequest(deviceName, serverUrl)
+                GenerateVpnConfigRequest(deviceName, publicHost)
             )
 
             val configString = response.configContent
@@ -85,7 +87,8 @@ class VpnRepositoryImpl @Inject constructor(
         Log.d(TAG, "Generating new VPN config for device: $deviceName")
         
         val serverUrl = preferencesManager.getServerUrl().first() ?: ""
-        val response = vpnApi.generateConfig(GenerateVpnConfigRequest(deviceName, serverUrl))
+        val publicHost = extractHostname(serverUrl)
+        val response = vpnApi.generateConfig(GenerateVpnConfigRequest(deviceName, publicHost))
 
         val configString = response.configContent
         if (configString.isNullOrBlank()) {
@@ -244,9 +247,10 @@ class VpnRepositoryImpl @Inject constructor(
         Log.d(TAG, "Fetching VPN config for type: $vpnType")
 
         val serverUrl = preferencesManager.getServerUrl().first() ?: ""
+        val publicHost = extractHostname(serverUrl)
         val deviceName = preferencesManager.getVpnDeviceName().first() ?: "Android Device"
         val response = vpnApi.fetchConfigByType(
-            FetchConfigByTypeRequest(vpnType, deviceName, serverUrl)
+            FetchConfigByTypeRequest(vpnType, deviceName, publicHost)
         )
 
         // Backend returns config_base64 only — decode to get config string
@@ -280,6 +284,23 @@ class VpnRepositoryImpl @Inject constructor(
     } catch (e: Exception) {
         Log.e(TAG, "Failed to fetch VPN config by type", e)
         Result.Error(Exception("Failed to fetch VPN config by type: ${e.message}", e))
+    }
+
+    override suspend fun clearCachedConfig() {
+        preferencesManager.clearVpnConfig()
+        Log.d(TAG, "Cached VPN config cleared")
+    }
+
+    /**
+     * Extract just the hostname from a URL, stripping scheme, port, and path.
+     * The server appends its own WireGuard port, so sending host:port would double it.
+     */
+    private fun extractHostname(url: String): String {
+        return try {
+            URI(url).host ?: url
+        } catch (e: Exception) {
+            url
+        }
     }
 
     companion object {

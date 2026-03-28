@@ -114,7 +114,11 @@ class PreferencesManager @Inject constructor(
     fun getVpnConfig(): Flow<String?> {
         return dataStore.data.map { prefs -> prefs[vpnConfigKey] }
     }
-    
+
+    suspend fun clearVpnConfig() {
+        dataStore.edit { prefs -> prefs.remove(vpnConfigKey) }
+    }
+
     // FCM Token (Firebase Cloud Messaging)
     suspend fun saveFcmToken(token: String) {
         dataStore.edit { prefs -> prefs[fcmTokenKey] = token }

@@ -29,7 +29,6 @@ import com.baluhost.android.presentation.ui.components.GradientButton
 import com.baluhost.android.presentation.ui.components.defaultGradient
 import com.baluhost.android.presentation.ui.components.errorGradient
 import com.baluhost.android.presentation.ui.theme.*
-import com.baluhost.android.service.vpn.BaluHostVpnService
 
 /**
  * VPN Screen - VPN connection management with dark glassmorphism design.
@@ -48,16 +47,7 @@ fun VpnScreen(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            BaluHostVpnService.clearPermissionRequest()
             viewModel.connect()
-        }
-    }
-
-    // Observe permission request from VPN service (Samsung workaround)
-    val permissionIntent by BaluHostVpnService.needsPermission.collectAsState()
-    LaunchedEffect(permissionIntent) {
-        permissionIntent?.let { intent ->
-            vpnPermissionLauncher.launch(intent)
         }
     }
 

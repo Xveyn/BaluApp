@@ -152,17 +152,19 @@ class NetworkStateManager(
 
     /**
      * Fallback-aware VPN detection.
-     * First tries ConnectivityManager transport check, then falls back to
-     * checking for typical VPN network interfaces (tun/tap/ppp).
+     * Uses allNetworks instead of activeNetwork because our app is excluded
+     * from VPN routing (addDisallowedApplication), so activeNetwork won't
+     * show VPN transport for this process.
      */
+    @Suppress("DEPRECATION")
     private fun isVpnConnectedFallback(): Boolean {
-        // Primary check
+        // Check ALL networks for VPN transport (not just activeNetwork)
         try {
-            val activeNetwork = connectivityManager.activeNetwork
-            val networkCapabilities = activeNetwork?.let { connectivityManager.getNetworkCapabilities(it) }
-            if (networkCapabilities != null && networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                return true
+            val hasVpn = connectivityManager.allNetworks.any { network ->
+                connectivityManager.getNetworkCapabilities(network)
+                    ?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
             }
+            if (hasVpn) return true
         } catch (_: Exception) {
             // ignore and continue to fallback
         }

@@ -54,4 +54,9 @@ interface VpnRepository {
      * Fetch VPN config for a specific type.
      */
     suspend fun fetchVpnConfigByType(vpnType: String): Result<VpnConfig>
+
+    /**
+     * Clear cached VPN config so next fetch regenerates from server.
+     */
+    suspend fun clearCachedConfig()
 }
