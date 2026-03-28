@@ -459,7 +459,10 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _powerActionInProgress.value = true
             when (val result = sendSoftSleepUseCase()) {
-                is Result.Success -> _snackbarEvent.emit("Sleep-Modus aktiviert")
+                is Result.Success -> {
+                    _snackbarEvent.emit("Sleep-Modus aktiviert")
+                    handlePostPowerAction()
+                }
                 is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Sleep fehlgeschlagen")
                 else -> {}
             }
@@ -471,11 +474,29 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _powerActionInProgress.value = true
             when (val result = sendSuspendUseCase()) {
-                is Result.Success -> _snackbarEvent.emit("System wird suspendiert")
+                is Result.Success -> {
+                    _snackbarEvent.emit("System wird suspendiert")
+                    handlePostPowerAction()
+                }
                 is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Suspend fehlgeschlagen")
                 else -> {}
             }
             _powerActionInProgress.value = false
+        }
+    }
+
+    private fun handlePostPowerAction() {
+        // Immediately clear stale online state
+        _nasStatus.value = NasStatus.UNKNOWN
+        _uiState.value = _uiState.value.copy(telemetry = null)
+        // Cancel current polling (may be mid-flight with 120s read timeout)
+        pollingJob?.cancel()
+        // Check NAS status via Fritz!Box after a short delay (server needs time to suspend)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(5_000)
+            updateNasStatus(false)
+            // Restart polling
+            startPolling()
         }
     }
 
