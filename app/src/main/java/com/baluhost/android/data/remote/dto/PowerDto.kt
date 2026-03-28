@@ -15,7 +15,7 @@ data class PowerSummaryDto(
     @SerializedName("devices_total")
     val devicesTotal: Int = 0,
     @SerializedName("devices")
-    val devices: List<TapoDevicePowerDto> = emptyList(),
+    val devices: List<DevicePowerDto> = emptyList(),
     @SerializedName("today_energy_kwh")
     val todayEnergyKwh: Double? = null,
     @SerializedName("today_avg_watts")
@@ -36,13 +36,13 @@ data class PowerSummaryDto(
     val autoScalingEnabled: Boolean = false,
     @SerializedName("active_demands_count")
     val activeDemandsCount: Int = 0,
-    @SerializedName("has_tapo_devices")
-    val hasTapoDevices: Boolean = false,
+    @SerializedName("has_smart_devices")
+    val hasSmartDevices: Boolean = false,
     @SerializedName("timestamp")
     val timestamp: String = ""
 )
 
-data class TapoDevicePowerDto(
+data class DevicePowerDto(
     @SerializedName("device_id")
     val deviceId: Int,
     @SerializedName("device_name")
