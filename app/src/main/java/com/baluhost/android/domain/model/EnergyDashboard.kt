@@ -8,5 +8,6 @@ data class EnergyDashboard(
     val todayAvgWatts: Double,
     val todayMinWatts: Double,
     val todayMaxWatts: Double,
-    val monthKwh: Double
+    val monthKwh: Double,
+    val deviceCount: Int = 1
 )
