@@ -29,7 +29,7 @@ class GetEnergyDashboardUseCase @Inject constructor(
             // Determine which device IDs to use
             val deviceIds = if (panelDeviceIds.isNotEmpty()) {
                 // Filter to only active devices that still exist
-                val activeIds = allDevices.filter { it.isActive }.map { it.id }.toSet()
+                val activeIds = allDevices.filter { it.isActive && "power_monitor" in it.capabilities }.map { it.id }.toSet()
                 panelDeviceIds.filter { it in activeIds }
             } else {
                 // Fallback: first active power_monitor device

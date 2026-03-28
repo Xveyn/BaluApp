@@ -36,6 +36,7 @@ class PowerDetailViewModel @Inject constructor(
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
 
     private var pollingJob: Job? = null
+    private var loadJob: Job? = null
 
     init {
         loadDevicesAndConfig()
@@ -92,7 +93,8 @@ class PowerDetailViewModel @Inject constructor(
     }
 
     private fun loadEnergyData(deviceId: Int) {
-        viewModelScope.launch {
+        loadJob?.cancel()
+        loadJob = viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
                 isLoading = _uiState.value.energyDashboard == null
             )
