@@ -99,7 +99,7 @@ class MonitoringRepositoryImpl @Inject constructor(
             Result.Success(
                 UptimeHistory(
                     samples = dto.samples.map { it.toUptimeDomain() },
-                    sleepEvents = dto.sleepEvents.map { it.toDomain() },
+                    sleepEvents = dto.sleepEvents?.map { it.toDomain() } ?: emptyList(),
                     sampleCount = dto.sampleCount,
                     source = dto.source
                 )

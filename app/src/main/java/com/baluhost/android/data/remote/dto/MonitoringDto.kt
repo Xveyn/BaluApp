@@ -83,7 +83,7 @@ data class UptimeHistoryResponseDto(
     @SerializedName("samples")
     val samples: List<UptimeSampleDto>,
     @SerializedName("sleep_events")
-    val sleepEvents: List<SleepEventDto>,
+    val sleepEvents: List<SleepEventDto>? = null,
     @SerializedName("sample_count")
     val sampleCount: Int,
     @SerializedName("source")
