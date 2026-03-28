@@ -1,6 +1,7 @@
 package com.baluhost.android.di
 
 import android.content.Context
+import android.net.ConnectivityManager
 import com.baluhost.android.BuildConfig
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.ActivityApi
@@ -10,6 +11,7 @@ import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.data.remote.api.MonitoringApi
 import com.baluhost.android.data.remote.api.SharesApi
+import com.baluhost.android.data.remote.api.PluginApi
 import com.baluhost.android.data.remote.api.SleepApi
 import com.baluhost.android.data.remote.api.SyncApi
 import com.baluhost.android.data.remote.api.SystemApi
@@ -17,6 +19,7 @@ import com.baluhost.android.data.remote.api.VpnApi
 import com.baluhost.android.data.remote.interceptors.AuthInterceptor
 import com.baluhost.android.data.remote.interceptors.DynamicBaseUrlInterceptor
 import com.baluhost.android.data.remote.interceptors.ErrorInterceptor
+import com.baluhost.android.data.remote.interceptors.VpnAwareSocketFactory
 import com.baluhost.android.util.Constants
 import com.baluhost.android.util.BssidReader
 import com.baluhost.android.util.NetworkMonitor
@@ -26,10 +29,12 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import okhttp3.Dns
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
@@ -78,13 +83,24 @@ object NetworkModule {
     
     @Provides
     @Singleton
+    fun provideVpnAwareSocketFactory(
+        @ApplicationContext context: Context
+    ): VpnAwareSocketFactory {
+        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        return VpnAwareSocketFactory(cm)
+    }
+
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         loggingInterceptor: HttpLoggingInterceptor,
         authInterceptor: AuthInterceptor,
         errorInterceptor: ErrorInterceptor,
-        dynamicBaseUrlInterceptor: DynamicBaseUrlInterceptor
+        dynamicBaseUrlInterceptor: DynamicBaseUrlInterceptor,
+        vpnAwareSocketFactory: VpnAwareSocketFactory
     ): OkHttpClient {
         return OkHttpClient.Builder()
+            .socketFactory(vpnAwareSocketFactory)
             .addInterceptor(dynamicBaseUrlInterceptor)  // MUST be first to change URL before auth
             .addInterceptor(errorInterceptor)
             .addInterceptor(authInterceptor)
@@ -95,7 +111,7 @@ object NetworkModule {
             .retryOnConnectionFailure(true)
             .build()
     }
-    
+
     @Provides
     @Singleton
     fun provideRetrofit(
@@ -182,9 +198,18 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    fun providePluginApi(retrofit: Retrofit): PluginApi {
+        return retrofit.create(PluginApi::class.java)
+    }
+
+    @Provides
+    @Singleton
     @Named("websocket")
-    fun provideWebSocketOkHttpClient(): OkHttpClient {
+    fun provideWebSocketOkHttpClient(
+        vpnAwareSocketFactory: VpnAwareSocketFactory
+    ): OkHttpClient {
         return OkHttpClient.Builder()
+            .socketFactory(vpnAwareSocketFactory)
             .connectTimeout(Constants.CONNECT_TIMEOUT, TimeUnit.SECONDS)
             .readTimeout(0, TimeUnit.MILLISECONDS) // No read timeout for WebSocket
             .writeTimeout(Constants.WRITE_TIMEOUT, TimeUnit.SECONDS)
