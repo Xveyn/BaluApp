@@ -20,6 +20,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import retrofit2.HttpException
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -231,7 +232,7 @@ class FolderSyncWorker @AssistedInject constructor(
                                 val requestBody = tempFile.asRequestBody(
                                     (localFileInfo.mimeType ?: "application/octet-stream").toMediaTypeOrNull()
                                 )
-                                val part = MultipartBody.Part.createFormData(
+                                var part = MultipartBody.Part.createFormData(
                                     "file", localFileInfo.name, requestBody
                                 )
                                 // Combine sync folder remote path with file's relative path
@@ -243,13 +244,37 @@ class FolderSyncWorker @AssistedInject constructor(
                                         append(upload.relativePath.trimStart('/'))
                                     }
                                 }
-                                syncRepository.uploadFile(
-                                    folderId,
-                                    fullRemotePath,
-                                    part
-                                )
-                                filesUploaded++
-                                bytesTransferred += localFileInfo.size
+                                var uploaded = false
+                                for (attempt in 1..MAX_UPLOAD_RETRIES) {
+                                    try {
+                                        syncRepository.uploadFile(
+                                            folderId,
+                                            fullRemotePath,
+                                            part
+                                        )
+                                        uploaded = true
+                                        break
+                                    } catch (e: HttpException) {
+                                        if (e.code() == 429 && attempt < MAX_UPLOAD_RETRIES) {
+                                            val delayMs = RETRY_BASE_DELAY_MS * attempt
+                                            Log.w(TAG, "Rate limited (429) uploading ${upload.relativePath}, retry $attempt/$MAX_UPLOAD_RETRIES in ${delayMs}ms")
+                                            kotlinx.coroutines.delay(delayMs)
+                                            // Rebuild the multipart part for retry (previous body was consumed)
+                                            part = MultipartBody.Part.createFormData(
+                                                "file", localFileInfo.name,
+                                                tempFile.asRequestBody(
+                                                    (localFileInfo.mimeType ?: "application/octet-stream").toMediaTypeOrNull()
+                                                )
+                                            )
+                                        } else {
+                                            throw e
+                                        }
+                                    }
+                                }
+                                if (uploaded) {
+                                    filesUploaded++
+                                    bytesTransferred += localFileInfo.size
+                                }
                             } finally {
                                 tempFile.delete()
                             }
@@ -426,6 +451,8 @@ class FolderSyncWorker @AssistedInject constructor(
 
     companion object {
         private const val TAG = "FolderSyncWorker"
+        private const val MAX_UPLOAD_RETRIES = 3
+        private const val RETRY_BASE_DELAY_MS = 2000L
         const val WORK_NAME = "folder_sync_work"
         const val INPUT_FOLDER_ID = "folder_id"
         const val INPUT_IS_MANUAL = "is_manual"
