@@ -10,13 +10,16 @@ class GetEnergyDashboardFullUseCase @Inject constructor(
     private val energyApi: EnergyApi,
     private val monitoringRepository: MonitoringRepository
 ) {
-    suspend operator fun invoke(): Result<EnergyDashboardFull> {
+    suspend operator fun invoke(deviceId: Int? = null): Result<EnergyDashboardFull> {
         return try {
-            val devices = energyApi.getTapoDevices()
-            val device = devices.firstOrNull { it.isActive && it.isMonitoring }
-                ?: return Result.Error(Exception("No active power monitoring device found"))
+            val resolvedId = deviceId ?: run {
+                val response = energyApi.getSmartDevices()
+                response.devices.firstOrNull {
+                    it.isActive && "power_monitor" in it.capabilities
+                }?.id ?: return Result.Error(Exception("No active power monitoring device found"))
+            }
 
-            monitoringRepository.getEnergyDashboardFull(device.id)
+            monitoringRepository.getEnergyDashboardFull(resolvedId)
         } catch (e: Exception) {
             Result.Error(e)
         }
