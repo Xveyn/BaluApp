@@ -121,7 +121,9 @@ fun SettingsScreen(
                     .padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // User Info Card
+                // ── Section: Konto ──
+                SectionHeader(text = "Konto")
+
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
                     intensity = GlassIntensity.Medium
@@ -146,7 +148,9 @@ fun SettingsScreen(
                     }
                 }
 
-                // Security Settings Card
+                // ── Section: Sicherheit ──
+                SectionHeader(text = "Sicherheit")
+
                 SecurityCard(
                     uiState = uiState,
                     onToggleBiometric = viewModel::toggleBiometric,
@@ -155,6 +159,269 @@ fun SettingsScreen(
                     onToggleAppLock = viewModel::toggleAppLock,
                     onSetLockTimeout = viewModel::setLockTimeout
                 )
+
+                // ── Section: Netzwerk & VPN ──
+                SectionHeader(text = "Netzwerk & VPN")
+
+                // Network Settings Card
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    intensity = GlassIntensity.Medium
+                ) {
+                    Text(
+                        text = "NETZWERK",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate500,
+                        letterSpacing = 2.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Home network status
+                    InfoRow(
+                        label = "Heimnetzwerk",
+                        value = if (uiState.homeBssidConfigured) "Konfiguriert" else "Nicht konfiguriert"
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    val context = LocalContext.current
+                    GradientButton(
+                        onClick = {
+                            // Check if permission is already granted
+                            val hasPermission = ContextCompat.checkSelfPermission(
+                                context, bssidPermission
+                            ) == PackageManager.PERMISSION_GRANTED
+                            if (hasPermission) {
+                                viewModel.setHomeNetwork()
+                            } else {
+                                showBssidRationale = true
+                            }
+                        },
+                        text = "Heimnetzwerk setzen",
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = uiState.isOnWifi
+                    )
+
+                    if (!uiState.isOnWifi) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Verbinde dich mit deinem Heim-WLAN um das Netzwerk zu setzen",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate400
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider(color = Slate700.copy(alpha = 0.5f))
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Auto-VPN toggle
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Auto-VPN wenn extern",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White
+                            )
+                            Text(
+                                text = "VPN automatisch verbinden wenn nicht im Heimnetzwerk",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Slate400
+                            )
+                        }
+                        Switch(
+                            checked = uiState.autoVpnOnExternal,
+                            onCheckedChange = { viewModel.toggleAutoVpn(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Sky400,
+                                checkedTrackColor = Slate800,
+                                uncheckedThumbColor = Slate400,
+                                uncheckedTrackColor = Slate800
+                            )
+                        )
+                    }
+                }
+
+                // VPN Settings Card
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    intensity = GlassIntensity.Medium
+                ) {
+                    Text(
+                        text = "VPN-EINSTELLUNGEN",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Slate500,
+                        letterSpacing = 2.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // VPN Status Card (inner glass)
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        intensity = GlassIntensity.Light,
+                        padding = PaddingValues(12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Status:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = if (vpnUiState.isConnected) "Verbunden" else "Getrennt",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (vpnUiState.isConnected) Green500 else Red500,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        vpnUiState.clientIp?.let { ip ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            InfoRow(label = "Lokale IP", value = ip)
+                        }
+
+                        vpnUiState.serverEndpoint?.let { endpoint ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            InfoRow(label = "Server", value = endpoint)
+                        }
+
+                        vpnUiState.deviceName?.let { deviceName ->
+                            Spacer(modifier = Modifier.height(8.dp))
+                            InfoRow(label = "Gerätename", value = deviceName)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // VPN Action Buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        GradientButton(
+                            onClick = {
+                                if (vpnUiState.isConnected) {
+                                    vpnViewModel.disconnect()
+                                } else {
+                                    vpnViewModel.connect()
+                                }
+                            },
+                            text = when {
+                                vpnUiState.isLoading && vpnUiState.isConnected -> "Trennen..."
+                                vpnUiState.isLoading -> "Verbinde..."
+                                vpnUiState.isConnected -> "Trennen"
+                                else -> "Verbinden"
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !vpnUiState.isLoading && vpnUiState.hasConfig,
+                            gradient = if (vpnUiState.isConnected) errorGradient() else defaultGradient()
+                        )
+
+                        GradientButton(
+                            onClick = { vpnViewModel.refreshConfig() },
+                            text = "Aktualisieren",
+                            modifier = Modifier.weight(1f),
+                            enabled = !vpnUiState.isLoading,
+                            gradient = com.baluhost.android.presentation.ui.components.secondaryGradient()
+                        )
+                    }
+
+                    // VPN Error Message
+                    vpnUiState.error?.let { error ->
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Fehler: $error",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Red500,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                // Fritz!Box Settings Card (admin only)
+                if (isAdmin) {
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        intensity = GlassIntensity.Medium,
+                        onClick = onNavigateToFritzBox
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "FRITZ!BOX",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Slate500,
+                                    letterSpacing = 2.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Wake-on-LAN Konfiguration",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Slate400
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Öffnen",
+                                tint = Sky400
+                            )
+                        }
+                    }
+                }
+
+                // ── Section: App-Einstellungen ──
+                SectionHeader(text = "App-Einstellungen")
+
+                // Notification Settings Card
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    intensity = GlassIntensity.Medium,
+                    onClick = onNavigateToNotificationPreferences
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "BENACHRICHTIGUNGEN",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Slate500,
+                                letterSpacing = 2.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Push, In-App und Ruhezeiten konfigurieren",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Slate400
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Öffnen",
+                            tint = Sky400
+                        )
+                    }
+                }
 
                 // Cache Management Card
                 GlassCard(
@@ -310,270 +577,12 @@ fun SettingsScreen(
                     }
                 }
 
-                // Notification Settings Card
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    intensity = GlassIntensity.Medium,
-                    onClick = onNavigateToNotificationPreferences
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "BENACHRICHTIGUNGEN",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Slate500,
-                                letterSpacing = 2.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "Push, In-App und Ruhezeiten konfigurieren",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = Slate400
-                            )
-                        }
-                        Icon(
-                            imageVector = Icons.Default.ChevronRight,
-                            contentDescription = "Öffnen",
-                            tint = Sky400
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Network Settings Card
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    intensity = GlassIntensity.Medium
-                ) {
-                    Text(
-                        text = "NETZWERK",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
-                        letterSpacing = 2.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Home network status
-                    InfoRow(
-                        label = "Heimnetzwerk",
-                        value = if (uiState.homeBssidConfigured) "Konfiguriert" else "Nicht konfiguriert"
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    val context = LocalContext.current
-                    GradientButton(
-                        onClick = {
-                            // Check if permission is already granted
-                            val hasPermission = ContextCompat.checkSelfPermission(
-                                context, bssidPermission
-                            ) == PackageManager.PERMISSION_GRANTED
-                            if (hasPermission) {
-                                viewModel.setHomeNetwork()
-                            } else {
-                                showBssidRationale = true
-                            }
-                        },
-                        text = "Heimnetzwerk setzen",
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = uiState.isOnWifi
-                    )
-
-                    if (!uiState.isOnWifi) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Verbinde dich mit deinem Heim-WLAN um das Netzwerk zu setzen",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate400
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-                    HorizontalDivider(color = Slate700.copy(alpha = 0.5f))
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Auto-VPN toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Auto-VPN wenn extern",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Medium,
-                                color = Color.White
-                            )
-                            Text(
-                                text = "VPN automatisch verbinden wenn nicht im Heimnetzwerk",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Slate400
-                            )
-                        }
-                        Switch(
-                            checked = uiState.autoVpnOnExternal,
-                            onCheckedChange = { viewModel.toggleAutoVpn(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Sky400,
-                                checkedTrackColor = Slate800,
-                                uncheckedThumbColor = Slate400,
-                                uncheckedTrackColor = Slate800
-                            )
-                        )
-                    }
-                }
-
-                // Fritz!Box Settings Card (admin only)
-                if (isAdmin) {
-                    GlassCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        intensity = GlassIntensity.Medium,
-                        onClick = onNavigateToFritzBox
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "FRITZ!BOX",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Slate500,
-                                    letterSpacing = 2.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = "Wake-on-LAN Konfiguration",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Slate400
-                                )
-                            }
-                            Icon(
-                                imageVector = Icons.Default.ChevronRight,
-                                contentDescription = "Öffnen",
-                                tint = Sky400
-                            )
-                        }
-                    }
-                }
-
-                // VPN Settings Card
-                GlassCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    intensity = GlassIntensity.Medium
-                ) {
-                    Text(
-                        text = "VPN-EINSTELLUNGEN",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
-                        letterSpacing = 2.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // VPN Status Card (inner glass)
-                    GlassCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        intensity = GlassIntensity.Light,
-                        padding = PaddingValues(12.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = "Status:",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = if (vpnUiState.isConnected) "Verbunden" else "Getrennt",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (vpnUiState.isConnected) Green500 else Red500,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        vpnUiState.clientIp?.let { ip ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            InfoRow(label = "Lokale IP", value = ip)
-                        }
-
-                        vpnUiState.serverEndpoint?.let { endpoint ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            InfoRow(label = "Server", value = endpoint)
-                        }
-
-                        vpnUiState.deviceName?.let { deviceName ->
-                            Spacer(modifier = Modifier.height(8.dp))
-                            InfoRow(label = "Gerätename", value = deviceName)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // VPN Action Buttons
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        GradientButton(
-                            onClick = {
-                                if (vpnUiState.isConnected) {
-                                    vpnViewModel.disconnect()
-                                } else {
-                                    vpnViewModel.connect()
-                                }
-                            },
-                            text = when {
-                                vpnUiState.isLoading && vpnUiState.isConnected -> "Trennen..."
-                                vpnUiState.isLoading -> "Verbinde..."
-                                vpnUiState.isConnected -> "Trennen"
-                                else -> "Verbinden"
-                            },
-                            modifier = Modifier.weight(1f),
-                            enabled = !vpnUiState.isLoading && vpnUiState.hasConfig,
-                            gradient = if (vpnUiState.isConnected) errorGradient() else defaultGradient()
-                        )
-
-                        GradientButton(
-                            onClick = { vpnViewModel.refreshConfig() },
-                            text = "Aktualisieren",
-                            modifier = Modifier.weight(1f),
-                            enabled = !vpnUiState.isLoading,
-                            gradient = com.baluhost.android.presentation.ui.components.secondaryGradient()
-                        )
-                    }
-
-                    // VPN Error Message
-                    vpnUiState.error?.let { error ->
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "Fehler: $error",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Red500,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
+                // ── Section: Gefahrenzone ──
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Danger Zone Card (red-tinted glass)
                 Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
+                    modifier = Modifier.fillMaxWidth(),
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(
                         containerColor = Red500.copy(alpha = 0.1f)
@@ -863,6 +872,20 @@ private fun SecurityCard(
             )
         }
     }
+}
+
+@Composable
+private fun SectionHeader(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = Slate400,
+        modifier = modifier.padding(top = 8.dp)
+    )
 }
 
 @Composable
