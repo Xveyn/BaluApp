@@ -146,10 +146,6 @@ fun MainScreen(
                                 popUpTo(0) { inclusive = true }
                             }
                         },
-                        onNavigateToFolderSync = {
-                            // Navigate to FolderSync screen
-                            parentNavController.navigate(Screen.FolderSync.route)
-                        },
                         onNavigateToNotificationPreferences = {
                             parentNavController.navigate(Screen.NotificationPreferences.route)
                         },
