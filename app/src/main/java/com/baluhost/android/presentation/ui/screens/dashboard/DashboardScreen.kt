@@ -358,8 +358,14 @@ fun DashboardScreen(
                             
                             SystemMetricCard(
                                 title = "UPTIME",
-                                value = formatUptime(telemetry?.uptime?.toLong() ?: 0),
-                                meta = "System availability",
+                                value = formatUptime(
+                                    uiState.currentUptime?.serverUptimeSeconds
+                                        ?: telemetry?.uptime?.toLong() ?: 0
+                                ),
+                                subtitle = uiState.currentUptime?.let {
+                                    "HW: ${formatUptime(it.systemUptimeSeconds)}"
+                                },
+                                meta = if (uiState.currentUptime != null) "Server-Instanz" else "System availability",
                                 delta = "Live",
                                 deltaTone = DeltaTone.LIVE,
                                 progress = 100f,

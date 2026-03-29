@@ -68,6 +68,28 @@ class FolderSyncWorker @AssistedInject constructor(
             val folderName = localFolderScanner.getFolderDisplayName(folderConfig.localUri) ?: folderId
             Log.d(TAG, "Folder config loaded: name=$folderName, remotePath=${folderConfig.remotePath}, syncType=${folderConfig.syncType}")
 
+            // Promote to foreground service to avoid WorkManager's 10-minute execution limit
+            try {
+                val foregroundNotification = syncNotificationManager.createForegroundNotification(
+                    folderId, folderName
+                )
+                val foregroundInfo = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                    ForegroundInfo(
+                        com.baluhost.android.util.NotificationIds.SYNC_PROGRESS,
+                        foregroundNotification,
+                        android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                    )
+                } else {
+                    ForegroundInfo(
+                        com.baluhost.android.util.NotificationIds.SYNC_PROGRESS,
+                        foregroundNotification
+                    )
+                }
+                setForeground(foregroundInfo)
+            } catch (e: Exception) {
+                Log.w(TAG, "Could not set foreground, sync may be time-limited", e)
+            }
+
             // 2. Check folder accessibility
             if (!localFolderScanner.isFolderAccessible(folderConfig.localUri)) {
                 syncNotificationManager.showSyncErrorNotification(
@@ -353,7 +375,16 @@ class FolderSyncWorker @AssistedInject constructor(
                 }
             }
 
-            // 9. Save sync history
+            // 9. Update lastSync on the folder config so next sync has a correct baseline
+            if (filesUploaded > 0 || filesDownloaded > 0 || errors.isEmpty()) {
+                try {
+                    syncRepository.updateSyncFolder(folderId, status = SyncStatus.IDLE)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to update folder lastSync", e)
+                }
+            }
+
+            // 10. Save sync history
             val duration = System.currentTimeMillis() - startTime
             val historyStatus = when {
                 errors.isNotEmpty() && (filesUploaded > 0 || filesDownloaded > 0) -> SyncHistoryStatus.PARTIAL_SUCCESS

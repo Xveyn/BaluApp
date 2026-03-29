@@ -119,6 +119,16 @@
                 android:value="Server connection monitoring for NAS status display" />
         </service>
 
+        <!-- WorkManager Foreground Service for long-running sync -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <meta-data
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Folder synchronization with NAS server" />
+        </service>
+
         <!-- Sync Notification Action Receiver -->
         <receiver
             android:name=".data.notification.SyncNotificationReceiver"

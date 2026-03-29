@@ -153,16 +153,11 @@ class SyncRepositoryImpl @Inject constructor(
     }
     
     override suspend fun listRemoteFiles(folderId: String, remotePath: String): List<RemoteFileInfo> {
-        return try {
-            val allFiles = mutableListOf<RemoteFileInfo>()
-            val basePath = remotePath.trimEnd('/')
-            listFilesRecursive(basePath, basePath, allFiles)
-            Log.d("SyncRepositoryImpl", "listRemoteFiles: found ${allFiles.size} files in $remotePath")
-            allFiles
-        } catch (e: Exception) {
-            Log.e("SyncRepositoryImpl", "listRemoteFiles failed for $remotePath", e)
-            emptyList()
-        }
+        val allFiles = mutableListOf<RemoteFileInfo>()
+        val basePath = remotePath.trimEnd('/')
+        listFilesRecursive(basePath, basePath, allFiles)
+        Log.d("SyncRepositoryImpl", "listRemoteFiles: found ${allFiles.size} files in $remotePath")
+        return allFiles
     }
 
     /**
@@ -188,7 +183,7 @@ class SyncRepositoryImpl @Inject constructor(
                         relativePath = relativePath,
                         name = item.name,
                         size = item.size,
-                        hash = "", // files/list doesn't provide hashes
+                        hash = item.checksum ?: "",
                         modifiedAt = parseIsoTimestamp(item.modifiedAt)
                     )
                 )

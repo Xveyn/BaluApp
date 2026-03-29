@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.notification.NotificationWebSocketManager
+import com.baluhost.android.domain.model.CurrentUptime
 import com.baluhost.android.domain.model.EnergyDashboard
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.model.OperationStatus
@@ -19,6 +20,7 @@ import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.usecase.activity.GetRecentFilesUseCase
 import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
+import com.baluhost.android.domain.usecase.system.GetCurrentUptimeUseCase
 import com.baluhost.android.domain.usecase.system.GetEnergyDashboardUseCase
 import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
 import com.baluhost.android.domain.usecase.shares.GetShareStatisticsUseCase
@@ -54,6 +56,7 @@ class DashboardViewModel @Inject constructor(
     private val getRecentFilesUseCase: GetRecentFilesUseCase,
     private val getCacheStatsUseCase: GetCacheStatsUseCase,
     private val getSystemTelemetryUseCase: GetSystemTelemetryUseCase,
+    private val getCurrentUptimeUseCase: GetCurrentUptimeUseCase,
     private val getEnergyDashboardUseCase: GetEnergyDashboardUseCase,
     private val getRaidStatusUseCase: GetRaidStatusUseCase,
     private val getSmartStatusUseCase: GetSmartStatusUseCase,
@@ -168,6 +171,7 @@ class DashboardViewModel @Inject constructor(
                         isLoading = false,
                         username = username,
                         telemetry = null,
+                        currentUptime = null,
                         error = null
                     )
                     updateNasStatus(false)
@@ -227,6 +231,17 @@ class DashboardViewModel @Inject constructor(
                     else -> null
                 }
 
+                // Load current uptime (server instance + hardware)
+                val uptimeResult = getCurrentUptimeUseCase()
+                val currentUptime = when (uptimeResult) {
+                    is Result.Success -> uptimeResult.data
+                    is Result.Error -> {
+                        Log.e("DashboardViewModel", "Failed to load current uptime", uptimeResult.exception)
+                        null
+                    }
+                    else -> null
+                }
+
                 // Load recent files from activity tracking (with fallback to root listing)
                 val recentFilesResult = getRecentFilesUseCase(limit = 5)
                 val recentFiles = when (recentFilesResult) {
@@ -254,6 +269,7 @@ class DashboardViewModel @Inject constructor(
                     isLoading = false,
                     username = username,
                     telemetry = telemetry,
+                    currentUptime = currentUptime,
                     energy = energy,
                     raidArrays = raidArrays,
                     smartDevices = smartDevices,
@@ -288,7 +304,7 @@ class DashboardViewModel @Inject constructor(
                 }
 
                 if (telemetry == null) {
-                    _uiState.value = _uiState.value.copy(telemetry = null)
+                    _uiState.value = _uiState.value.copy(telemetry = null, currentUptime = null)
                     updateNasStatus(false)
                     return@launch
                 }
@@ -321,8 +337,16 @@ class DashboardViewModel @Inject constructor(
                     else -> _uiState.value.shareStats
                 }
 
+                val uptimeResult = getCurrentUptimeUseCase()
+                val currentUptime = when (uptimeResult) {
+                    is Result.Success -> uptimeResult.data
+                    is Result.Error -> _uiState.value.currentUptime
+                    else -> _uiState.value.currentUptime
+                }
+
                 _uiState.value = _uiState.value.copy(
                     telemetry = telemetry,
+                    currentUptime = currentUptime,
                     energy = energy,
                     raidArrays = raidArrays,
                     smartDevices = smartDevices,
@@ -527,6 +551,7 @@ data class DashboardUiState(
     val isLoading: Boolean = false,
     val username: String = "",
     val telemetry: SystemInfo? = null,
+    val currentUptime: CurrentUptime? = null,
     val energy: EnergyDashboard? = null,
     val raidArrays: List<RaidArray> = emptyList(),
     val smartDevices: List<SmartDeviceInfo> = emptyList(),
