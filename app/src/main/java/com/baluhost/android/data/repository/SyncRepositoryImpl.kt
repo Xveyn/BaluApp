@@ -10,6 +10,8 @@ import com.baluhost.android.domain.repository.SyncRepository
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
@@ -388,11 +390,16 @@ private fun parseIsoTimestamp(timestamp: String): Long {
         val zonedDateTime = ZonedDateTime.parse(timestamp, DateTimeFormatter.ISO_DATE_TIME)
         zonedDateTime.toInstant().toEpochMilli()
     } catch (e: Exception) {
-        // Fallback to simple ISO instant parsing
         try {
             Instant.parse(timestamp).toEpochMilli()
         } catch (e2: Exception) {
-            0L
+            // Timestamps without timezone info (e.g. "2026-03-29T12:30:00") — assume UTC
+            try {
+                LocalDateTime.parse(timestamp, DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                    .toInstant(ZoneOffset.UTC).toEpochMilli()
+            } catch (e3: Exception) {
+                0L
+            }
         }
     }
 }
