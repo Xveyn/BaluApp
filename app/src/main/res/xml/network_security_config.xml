@@ -16,30 +16,19 @@
 
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
-            <!-- Trust system CA certificates for HTTPS -->
             <certificates src="system" />
-            <!-- Trust user-added CA certificates (e.g., for self-signed certs with mkcert) -->
             <certificates src="user" />
         </trust-anchors>
     </base-config>
 
-    <!--
-        Alternative approach for stricter security:
-        Uncomment the section below and comment out the base-config above
-        to allow HTTP only to specific domains while keeping HTTPS required for everything else
-    -->
-    <!--
-    <base-config cleartextTrafficPermitted="false">
+    <!-- Trust self-signed BaluHost NAS certificate -->
+    <domain-config>
+        <domain includeSubdomains="true">baluhost.local</domain>
+        <domain includeSubdomains="true">baluhost</domain>
+        <domain includeSubdomains="true">192.168.178.53</domain>
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="user" />
+            <certificates src="@raw/baluhost_cert" />
         </trust-anchors>
-    </base-config>
-
-    <domain-config cleartextTrafficPermitted="true">
-        <domain includeSubdomains="true">localhost</domain>
-        <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">.local</domain>
     </domain-config>
-    -->
 </network-security-config>
