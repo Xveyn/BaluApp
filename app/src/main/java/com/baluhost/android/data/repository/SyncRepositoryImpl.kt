@@ -6,6 +6,7 @@ import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.remote.api.SyncApi
 import com.baluhost.android.data.remote.dto.sync.*
 import com.baluhost.android.domain.model.sync.*
+import com.baluhost.android.domain.model.sync.SyncTrigger
 import com.baluhost.android.domain.repository.SyncRepository
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -196,10 +197,11 @@ class SyncRepositoryImpl @Inject constructor(
     override suspend fun uploadFile(
         folderId: String,
         remotePath: String,
-        file: okhttp3.MultipartBody.Part
+        file: okhttp3.MultipartBody.Part,
+        trigger: SyncTrigger?
     ) {
         val pathBody = remotePath.toRequestBody("text/plain".toMediaTypeOrNull())
-        syncApi.uploadFile(file, pathBody)
+        syncApi.uploadFile(file, pathBody, trigger)
     }
 
     /**
@@ -238,9 +240,10 @@ class SyncRepositoryImpl @Inject constructor(
     
     override suspend fun downloadFile(
         folderId: String,
-        remotePath: String
+        remotePath: String,
+        trigger: SyncTrigger?
     ): okhttp3.ResponseBody {
-        return syncApi.downloadFile(remotePath)
+        return syncApi.downloadFile(remotePath, trigger)
     }
 
     override suspend fun getSyncSchedules(): Result<List<SyncSchedule>> {

@@ -1,6 +1,7 @@
 package com.baluhost.android.domain.repository
 
 import com.baluhost.android.domain.model.sync.*
+import com.baluhost.android.domain.model.sync.SyncTrigger
 
 /**
  * Repository interface for folder synchronization operations.
@@ -84,12 +85,12 @@ interface SyncRepository {
     /**
      * Upload a file to a sync folder.
      */
-    suspend fun uploadFile(folderId: String, remotePath: String, file: okhttp3.MultipartBody.Part)
+    suspend fun uploadFile(folderId: String, remotePath: String, file: okhttp3.MultipartBody.Part, trigger: SyncTrigger? = null)
 
     /**
      * Download a file from a sync folder.
      */
-    suspend fun downloadFile(folderId: String, remotePath: String): okhttp3.ResponseBody
+    suspend fun downloadFile(folderId: String, remotePath: String, trigger: SyncTrigger? = null): okhttp3.ResponseBody
 
     /**
      * Get sync schedules from server.

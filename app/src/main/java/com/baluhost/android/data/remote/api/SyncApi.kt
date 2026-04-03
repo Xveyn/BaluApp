@@ -1,6 +1,7 @@
 package com.baluhost.android.data.remote.api
 
 import com.baluhost.android.data.remote.dto.sync.*
+import com.baluhost.android.domain.model.sync.SyncTrigger
 import retrofit2.http.*
 
 /**
@@ -100,7 +101,8 @@ interface SyncApi {
     @POST("files/upload")
     suspend fun uploadFile(
         @Part file: okhttp3.MultipartBody.Part,
-        @Part("path") remotePath: okhttp3.RequestBody
+        @Part("path") remotePath: okhttp3.RequestBody,
+        @Tag trigger: SyncTrigger? = null
     )
 
     /**
@@ -109,7 +111,8 @@ interface SyncApi {
      */
     @POST("files/upload/chunked/init")
     suspend fun initiateChunkedUpload(
-        @Body request: InitiateUploadDto
+        @Body request: InitiateUploadDto,
+        @Tag trigger: SyncTrigger? = null
     ): InitiateUploadResponseDto
 
     /**
@@ -120,7 +123,8 @@ interface SyncApi {
     suspend fun uploadChunk(
         @Path("upload_id") uploadId: String,
         @Query("chunk_index") chunkIndex: Int,
-        @Body chunk: okhttp3.RequestBody
+        @Body chunk: okhttp3.RequestBody,
+        @Tag trigger: SyncTrigger? = null
     ): ChunkUploadResponseDto
 
     /**
@@ -129,7 +133,8 @@ interface SyncApi {
      */
     @POST("files/upload/chunked/{upload_id}/complete")
     suspend fun finalizeChunkedUpload(
-        @Path("upload_id") uploadId: String
+        @Path("upload_id") uploadId: String,
+        @Tag trigger: SyncTrigger? = null
     )
 
     /**
@@ -149,7 +154,8 @@ interface SyncApi {
     @Streaming
     @GET("files/download/{resource_path}")
     suspend fun downloadFile(
-        @Path("resource_path", encoded = true) resourcePath: String
+        @Path("resource_path", encoded = true) resourcePath: String,
+        @Tag trigger: SyncTrigger? = null
     ): okhttp3.ResponseBody
 
     /**

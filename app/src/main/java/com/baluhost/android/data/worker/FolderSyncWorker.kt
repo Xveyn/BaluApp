@@ -9,6 +9,7 @@ import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.notification.ServerConnectionMonitor
 import com.baluhost.android.data.notification.SyncNotificationManager
 import com.baluhost.android.domain.model.sync.*
+import com.baluhost.android.domain.model.sync.SyncTrigger
 import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.service.ConflictDetectionService
 import com.baluhost.android.util.LocalFolderScanner
@@ -44,6 +45,7 @@ class FolderSyncWorker @AssistedInject constructor(
                 workDataOf("error" to "No folder ID provided")
             )
         val isManual = inputData.getBoolean(INPUT_IS_MANUAL, false)
+        val syncTrigger = if (isManual) SyncTrigger.MANUAL else SyncTrigger.AUTO
         val startTime = System.currentTimeMillis()
 
         Log.d(TAG, "Starting sync for folder: $folderId (manual=$isManual)")
@@ -272,7 +274,8 @@ class FolderSyncWorker @AssistedInject constructor(
                                         syncRepository.uploadFile(
                                             folderId,
                                             fullRemotePath,
-                                            part
+                                            part,
+                                            syncTrigger
                                         )
                                         uploaded = true
                                         break
@@ -345,7 +348,8 @@ class FolderSyncWorker @AssistedInject constructor(
                         }
                         val responseBody = syncRepository.downloadFile(
                             folderId,
-                            fullDownloadPath
+                            fullDownloadPath,
+                            syncTrigger
                         )
 
                         // Write downloaded file to local folder via SAF
