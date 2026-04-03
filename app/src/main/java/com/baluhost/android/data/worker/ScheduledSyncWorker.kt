@@ -69,7 +69,35 @@ class ScheduledSyncWorker @AssistedInject constructor(
                 }
             }
 
-            // 2. Get all sync folders with autoSync=true
+            // 2. Preflight: check if NAS is sleeping
+            try {
+                val preflightResult = syncRepository.getSyncPreflight()
+                val preflight = preflightResult.getOrNull()
+                if (preflight != null) {
+                    // Cache sleep schedule for offline awareness
+                    preflight.sleepSchedule?.let { schedule ->
+                        preferencesManager.saveSleepSchedule(
+                            sleepTime = schedule.sleepTime,
+                            wakeTime = schedule.wakeTime,
+                            enabled = schedule.enabled
+                        )
+                    }
+                    if (!preflight.syncAllowed) {
+                        Log.d(TAG, "Preflight: sync blocked (${preflight.blockReason}), next wake: ${preflight.nextWakeAt}")
+                        return@withContext Result.success()
+                    }
+                }
+            } catch (e: Exception) {
+                // NAS unreachable — check cached sleep schedule
+                val probablySleeping = preferencesManager.isNasProbablySleeping().first()
+                if (probablySleeping) {
+                    Log.d(TAG, "NAS unreachable and probably sleeping, skipping sync")
+                    return@withContext Result.success()
+                }
+                Log.w(TAG, "Preflight failed but NAS not in sleep window, proceeding: ${e.message}")
+            }
+
+            // 3. Get all sync folders with autoSync=true
             val deviceId = preferencesManager.getDeviceId().first()
                 ?: return@withContext Result.failure(
                     workDataOf("error" to "No device ID configured")
@@ -89,7 +117,7 @@ class ScheduledSyncWorker @AssistedInject constructor(
                 return@withContext Result.success()
             }
 
-            // 3. Enqueue FolderSyncWorker for each folder
+            // 4. Enqueue FolderSyncWorker for each folder
             for (folder in autoSyncFolders) {
                 val syncRequest = FolderSyncWorker.createOneTimeRequest(
                     folderId = folder.id,
