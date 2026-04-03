@@ -288,6 +288,16 @@ class FolderSyncWorker @AssistedInject constructor(
                                                     (localFileInfo.mimeType ?: "application/octet-stream").toMediaTypeOrNull()
                                                 )
                                             )
+                                        } else if (e.code() == 503) {
+                                            Log.w(TAG, "NAS sleeping (503) during upload of ${upload.relativePath}")
+                                            val retryAfter = e.response()?.headers()?.get("Retry-After")?.toLongOrNull()
+                                            syncNotificationManager.showSyncErrorNotification(
+                                                folderId, folderName,
+                                                "NAS schlaeft, Sync pausiert" + if (retryAfter != null) " (${retryAfter / 60} Min.)" else ""
+                                            )
+                                            return@withContext Result.failure(
+                                                workDataOf("error" to "NAS sleeping", "retry_after_seconds" to (retryAfter ?: 3600L))
+                                            )
                                         } else {
                                             throw e
                                         }
@@ -441,6 +451,28 @@ class FolderSyncWorker @AssistedInject constructor(
             // Worker was cancelled - don't retry, just fail
             Log.w(TAG, "Sync was cancelled for folder: $folderId")
             Result.failure(workDataOf("error" to "Sync cancelled"))
+        } catch (e: HttpException) {
+            if (e.code() == 503) {
+                Log.w(TAG, "NAS sleeping (503) during sync of folder: $folderId")
+                val retryAfter = e.response()?.headers()?.get("Retry-After")?.toLongOrNull()
+                syncNotificationManager.showSyncErrorNotification(
+                    folderId,
+                    folderId,
+                    "NAS schlaeft, Sync pausiert" + if (retryAfter != null) " (${retryAfter / 60} Min.)" else ""
+                )
+                Result.failure(
+                    workDataOf("error" to "NAS sleeping", "retry_after_seconds" to (retryAfter ?: 3600L))
+                )
+            } else {
+                Log.e(TAG, "HTTP error during sync", e)
+                val duration = System.currentTimeMillis() - startTime
+                syncNotificationManager.showSyncErrorNotification(
+                    folderId,
+                    folderId,
+                    "Synchronisation fehlgeschlagen: HTTP ${e.code()}"
+                )
+                Result.failure(workDataOf("error" to "HTTP ${e.code()}: ${e.message()}"))
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed unexpectedly", e)
             val duration = System.currentTimeMillis() - startTime
