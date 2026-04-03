@@ -45,6 +45,7 @@ import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.NotificationBell
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
 import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.presentation.ui.screens.vpn.VpnViewModel
 import com.baluhost.android.presentation.ui.theme.*
@@ -83,6 +84,7 @@ fun DashboardScreen(
     val vpnBannerDismissed by viewModel.vpnBannerDismissed.collectAsState()
     val isVpnActive by viewModel.isVpnActive.collectAsState()
     val isAdmin by viewModel.isAdmin.collectAsState()
+    val powerPermissions by viewModel.powerPermissions.collectAsState()
     val powerActionInProgress by viewModel.powerActionInProgress.collectAsState()
     val nasStatus by viewModel.nasStatus.collectAsState()
     val wolAvailability by viewModel.wolAvailability.collectAsState()
@@ -253,9 +255,11 @@ fun DashboardScreen(
                         nasStatus = nasStatus,
                         uptimeSeconds = uiState.telemetry?.uptime?.toLong(),
                         isAdmin = isAdmin,
+                        powerPermissions = powerPermissions,
                         isActionInProgress = powerActionInProgress,
                         wolAvailability = wolAvailability,
                         onSendWol = { viewModel.sendWol() },
+                        onSendWake = { viewModel.sendWake() },
                         onSendSoftSleep = { viewModel.sendSoftSleep() },
                         onSendSuspend = { viewModel.sendSuspend() },
                         onNavigateToFritzBoxSettings = onNavigateToFritzBoxSettings
@@ -897,9 +901,11 @@ private fun ServerStatusStrip(
     nasStatus: NasStatus,
     uptimeSeconds: Long?,
     isAdmin: Boolean,
+    powerPermissions: PowerPermissions,
     isActionInProgress: Boolean,
     wolAvailability: WolAvailability,
     onSendWol: () -> Unit,
+    onSendWake: () -> Unit,
     onSendSoftSleep: () -> Unit,
     onSendSuspend: () -> Unit,
     onNavigateToFritzBoxSettings: () -> Unit
@@ -954,7 +960,7 @@ private fun ServerStatusStrip(
                     )
                 }
             }
-            if (isAdmin) {
+            if (isAdmin || powerPermissions.hasAnyPermission) {
                 IconButton(
                     onClick = { showPowerDialog = true },
                     modifier = Modifier.size(32.dp),
@@ -999,52 +1005,72 @@ private fun ServerStatusStrip(
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     when (nasStatus) {
                         NasStatus.SLEEPING -> {
-                            PowerOptionButton(
-                                icon = Icons.Default.WbSunny,
-                                label = "NAS aufwecken",
-                                description = "Wake-on-LAN über Fritz!Box",
-                                color = Green500,
-                                onClick = {
-                                    showPowerDialog = false
-                                    confirmAction = PowerAction.WOL
-                                }
-                            )
+                            if (isAdmin || powerPermissions.canWol) {
+                                PowerOptionButton(
+                                    icon = Icons.Default.WbSunny,
+                                    label = "NAS aufwecken",
+                                    description = "Wake-on-LAN über Fritz!Box",
+                                    color = Green500,
+                                    onClick = {
+                                        showPowerDialog = false
+                                        confirmAction = PowerAction.WOL
+                                    }
+                                )
+                            }
+                            if (isAdmin || powerPermissions.canWake) {
+                                PowerOptionButton(
+                                    icon = Icons.Default.PlayArrow,
+                                    label = "Server Wake",
+                                    description = "Server aus dem Soft-Sleep aufwecken",
+                                    color = Green500,
+                                    onClick = {
+                                        showPowerDialog = false
+                                        confirmAction = PowerAction.WAKE
+                                    }
+                                )
+                            }
                         }
                         NasStatus.ONLINE -> {
-                            PowerOptionButton(
-                                icon = Icons.Default.Bedtime,
-                                label = "Soft Sleep",
-                                description = "Services pausieren, Disks herunterfahren",
-                                color = Sky400,
-                                onClick = {
-                                    showPowerDialog = false
-                                    confirmAction = PowerAction.SOFT_SLEEP
-                                }
-                            )
-                            PowerOptionButton(
-                                icon = Icons.Default.PowerSettingsNew,
-                                label = "Suspend",
-                                description = "System komplett schlafen legen",
-                                color = Orange500,
-                                onClick = {
-                                    showPowerDialog = false
-                                    confirmAction = PowerAction.SUSPEND
-                                }
-                            )
+                            if (isAdmin || powerPermissions.canSoftSleep) {
+                                PowerOptionButton(
+                                    icon = Icons.Default.Bedtime,
+                                    label = "Soft Sleep",
+                                    description = "Services pausieren, Disks herunterfahren",
+                                    color = Sky400,
+                                    onClick = {
+                                        showPowerDialog = false
+                                        confirmAction = PowerAction.SOFT_SLEEP
+                                    }
+                                )
+                            }
+                            if (isAdmin || powerPermissions.canSuspend) {
+                                PowerOptionButton(
+                                    icon = Icons.Default.PowerSettingsNew,
+                                    label = "Suspend",
+                                    description = "System komplett schlafen legen",
+                                    color = Orange500,
+                                    onClick = {
+                                        showPowerDialog = false
+                                        confirmAction = PowerAction.SUSPEND
+                                    }
+                                )
+                            }
                         }
                         else -> {
                             when (wolAvailability) {
                                 WolAvailability.AVAILABLE -> {
-                                    PowerOptionButton(
-                                        icon = Icons.Default.WbSunny,
-                                        label = "NAS aufwecken",
-                                        description = "Wake-on-LAN über Fritz!Box",
-                                        color = Green500,
-                                        onClick = {
-                                            showPowerDialog = false
-                                            confirmAction = PowerAction.WOL
-                                        }
-                                    )
+                                    if (isAdmin || powerPermissions.canWol) {
+                                        PowerOptionButton(
+                                            icon = Icons.Default.WbSunny,
+                                            label = "NAS aufwecken",
+                                            description = "Wake-on-LAN über Fritz!Box",
+                                            color = Green500,
+                                            onClick = {
+                                                showPowerDialog = false
+                                                confirmAction = PowerAction.WOL
+                                            }
+                                        )
+                                    }
                                 }
                                 WolAvailability.FRITZ_BOX_ERROR -> {
                                     Text(
@@ -1107,6 +1133,7 @@ private fun ServerStatusStrip(
                     confirmAction = null
                     when (action) {
                         PowerAction.WOL -> onSendWol()
+                        PowerAction.WAKE -> onSendWake()
                         PowerAction.SOFT_SLEEP -> onSendSoftSleep()
                         PowerAction.SUSPEND -> onSendSuspend()
                     }
@@ -1139,6 +1166,11 @@ private enum class PowerAction(
     WOL(
         title = "NAS aufwecken",
         confirmMessage = "NAS über Fritz!Box aufwecken?",
+        color = Green500
+    ),
+    WAKE(
+        title = "Server aufwecken",
+        confirmMessage = "Server aus dem Soft-Sleep aufwecken?",
         color = Green500
     ),
     SOFT_SLEEP(

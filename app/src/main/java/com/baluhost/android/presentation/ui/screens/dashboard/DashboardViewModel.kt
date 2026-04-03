@@ -28,8 +28,11 @@ import com.baluhost.android.domain.usecase.system.GetSmartStatusUseCase
 import com.baluhost.android.domain.usecase.system.GetSystemTelemetryUseCase
 import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
+import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
+import com.baluhost.android.domain.usecase.power.GetMyPowerPermissionsUseCase
+import com.baluhost.android.domain.usecase.power.SendWakeUseCase
 import com.baluhost.android.domain.usecase.power.SendWolUseCase
 import com.baluhost.android.domain.usecase.power.SendSoftSleepUseCase
 import com.baluhost.android.domain.usecase.power.SendSuspendUseCase
@@ -69,7 +72,9 @@ class DashboardViewModel @Inject constructor(
     private val sendWolUseCase: SendWolUseCase,
     private val sendSoftSleepUseCase: SendSoftSleepUseCase,
     private val sendSuspendUseCase: SendSuspendUseCase,
-    private val checkNasStatusUseCase: CheckNasStatusUseCase
+    private val checkNasStatusUseCase: CheckNasStatusUseCase,
+    private val getMyPowerPermissionsUseCase: GetMyPowerPermissionsUseCase,
+    private val sendWakeUseCase: SendWakeUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -92,6 +97,9 @@ class DashboardViewModel @Inject constructor(
 
     private val _isAdmin = MutableStateFlow(false)
     val isAdmin: StateFlow<Boolean> = _isAdmin.asStateFlow()
+
+    private val _powerPermissions = MutableStateFlow(PowerPermissions())
+    val powerPermissions: StateFlow<PowerPermissions> = _powerPermissions.asStateFlow()
 
     private val _nasStatus = MutableStateFlow(NasStatus.UNKNOWN)
     val nasStatus: StateFlow<NasStatus> = _nasStatus.asStateFlow()
@@ -122,7 +130,7 @@ class DashboardViewModel @Inject constructor(
         startPolling()
         observeHomeNetworkState()
         checkVpnConfig()
-        loadUserRole()
+        loadPowerPermissions()
         observePendingOperations()
     }
     
@@ -424,10 +432,27 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
-    private fun loadUserRole() {
+    private fun loadPowerPermissions() {
         viewModelScope.launch {
+            // First, set admin state from stored role (instant, no network)
             val role = preferencesManager.getUserRole().first() ?: "user"
             _isAdmin.value = role == "admin"
+
+            // Then fetch granular permissions from server
+            when (val result = getMyPowerPermissionsUseCase()) {
+                is Result.Success -> _powerPermissions.value = result.data
+                is Result.Error -> {
+                    // If admin, default to all permissions; if user, default to none
+                    if (_isAdmin.value) {
+                        _powerPermissions.value = PowerPermissions(
+                            canSoftSleep = true, canWake = true,
+                            canSuspend = true, canWol = true
+                        )
+                    }
+                    Log.w("DashboardViewModel", "Failed to load power permissions", result.exception)
+                }
+                else -> {}
+            }
         }
     }
 
@@ -503,6 +528,23 @@ class DashboardViewModel @Inject constructor(
                     handlePostPowerAction()
                 }
                 is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Suspend fehlgeschlagen")
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    fun sendWake() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = sendWakeUseCase()) {
+                is Result.Success -> {
+                    _snackbarEvent.emit("Wake-Signal gesendet")
+                    // After wake, start polling to detect when server comes online
+                    _nasStatus.value = NasStatus.UNKNOWN
+                    startPolling()
+                }
+                is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Wake fehlgeschlagen")
                 else -> {}
             }
             _powerActionInProgress.value = false

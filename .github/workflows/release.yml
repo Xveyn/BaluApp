@@ -1,4 +1,4 @@
-name: Release to Play Store
+name: Release APK
 
 on:
   push:
@@ -10,6 +10,8 @@ on:
 jobs:
   release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -28,25 +30,33 @@ jobs:
       - name: Decode google-services.json
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > app/google-services.json
 
-      - name: Auto-increment versionCode
+      - name: Extract version
+        id: version
+        run: |
+          VERSION_NAME=$(grep 'versionName' app/build.gradle.kts | head -1 | grep -o '"[^"]*"' | tr -d '"')
+          VERSION_CODE=$((1 + ${{ github.run_number }}))
+          echo "name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION_NAME}-${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+
+      - name: Set versionCode
         run: |
           CURRENT=$(grep 'versionCode' app/build.gradle.kts | head -1 | grep -o '[0-9]*')
-          NEW=$((CURRENT + ${{ github.run_number }}))
-          sed -i "s/versionCode = $CURRENT/versionCode = $NEW/" app/build.gradle.kts
+          sed -i "s/versionCode = $CURRENT/versionCode = ${{ steps.version.outputs.code }}/" app/build.gradle.kts
 
-      - name: Build Release AAB
+      - name: Build Release APK
         env:
           KEYSTORE_PATH: baluhost-release.jks
           KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: ./gradlew bundleRelease
+        run: ./gradlew assembleRelease
 
-      - name: Upload to Play Store (Internal Testing)
-        uses: r0adkll/upload-google-play@v1
-        with:
-          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
-          packageName: com.baluhost.android
-          releaseFiles: app/build/outputs/bundle/release/app-release.aab
-          track: internal
-          status: completed
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" \
+            app/build/outputs/apk/release/app-release.apk \
+            --title "Release ${{ steps.version.outputs.name }} (${{ steps.version.outputs.code }})" \
+            --generate-notes
