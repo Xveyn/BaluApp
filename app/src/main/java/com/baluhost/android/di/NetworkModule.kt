@@ -19,6 +19,7 @@ import com.baluhost.android.data.remote.api.VpnApi
 import com.baluhost.android.data.remote.interceptors.AuthInterceptor
 import com.baluhost.android.data.remote.interceptors.DynamicBaseUrlInterceptor
 import com.baluhost.android.data.remote.interceptors.ErrorInterceptor
+import com.baluhost.android.data.remote.interceptors.SyncTriggerInterceptor
 import com.baluhost.android.data.remote.interceptors.VpnAwareSocketFactory
 import com.baluhost.android.util.Constants
 import com.baluhost.android.util.BssidReader
@@ -72,7 +73,13 @@ object NetworkModule {
     fun provideErrorInterceptor(): ErrorInterceptor {
         return ErrorInterceptor()
     }
-    
+
+    @Provides
+    @Singleton
+    fun provideSyncTriggerInterceptor(): SyncTriggerInterceptor {
+        return SyncTriggerInterceptor()
+    }
+
     @Provides
     @Singleton
     fun provideDynamicBaseUrlInterceptor(
@@ -97,13 +104,15 @@ object NetworkModule {
         authInterceptor: AuthInterceptor,
         errorInterceptor: ErrorInterceptor,
         dynamicBaseUrlInterceptor: DynamicBaseUrlInterceptor,
-        vpnAwareSocketFactory: VpnAwareSocketFactory
+        vpnAwareSocketFactory: VpnAwareSocketFactory,
+        syncTriggerInterceptor: SyncTriggerInterceptor
     ): OkHttpClient {
         return OkHttpClient.Builder()
             .socketFactory(vpnAwareSocketFactory)
-            .addInterceptor(dynamicBaseUrlInterceptor)  // MUST be first to change URL before auth
+            .addInterceptor(dynamicBaseUrlInterceptor)
             .addInterceptor(errorInterceptor)
             .addInterceptor(authInterceptor)
+            .addInterceptor(syncTriggerInterceptor)
             .addInterceptor(loggingInterceptor)
             .connectTimeout(Constants.CONNECT_TIMEOUT, TimeUnit.SECONDS)
             .readTimeout(Constants.READ_TIMEOUT, TimeUnit.SECONDS)
