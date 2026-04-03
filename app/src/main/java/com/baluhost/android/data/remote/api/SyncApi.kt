@@ -184,4 +184,10 @@ interface SyncApi {
      */
     @POST("sync/schedule/{schedule_id}/enable")
     suspend fun enableSyncSchedule(@Path("schedule_id") scheduleId: Int)
+
+    /**
+     * Check if sync is allowed (sleep-aware preflight).
+     */
+    @GET("sync/preflight")
+    suspend fun getSyncPreflight(): SyncPreflightDto
 }
