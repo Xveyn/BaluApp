@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.baluhost.android.data.local.security.SecurePreferencesManager
 import com.baluhost.android.util.Constants
+import com.baluhost.android.util.SleepScheduleUtil
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
@@ -393,6 +394,33 @@ class PreferencesManager @Inject constructor(
                 } else null
             } catch (e: Exception) {
                 null
+            }
+        }
+    }
+
+    // Sleep schedule cache (for offline NAS sleep awareness)
+    suspend fun saveSleepSchedule(sleepTime: String, wakeTime: String, enabled: Boolean) {
+        dataStore.edit { prefs ->
+            prefs[stringPreferencesKey("nas_sleep_time")] = sleepTime
+            prefs[stringPreferencesKey("nas_wake_time")] = wakeTime
+            prefs[stringPreferencesKey("nas_sleep_enabled")] = enabled.toString()
+        }
+    }
+
+    fun isNasProbablySleeping(): Flow<Boolean> {
+        return dataStore.data.map { prefs ->
+            val enabled = prefs[stringPreferencesKey("nas_sleep_enabled")]?.toBoolean() ?: false
+            if (!enabled) return@map false
+            val sleepTimeStr = prefs[stringPreferencesKey("nas_sleep_time")] ?: return@map false
+            val wakeTimeStr = prefs[stringPreferencesKey("nas_wake_time")] ?: return@map false
+            try {
+                SleepScheduleUtil.isInSleepWindow(
+                    now = java.time.LocalTime.now(),
+                    sleepTime = java.time.LocalTime.parse(sleepTimeStr),
+                    wakeTime = java.time.LocalTime.parse(wakeTimeStr)
+                )
+            } catch (e: Exception) {
+                false
             }
         }
     }

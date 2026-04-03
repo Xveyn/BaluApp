@@ -87,7 +87,10 @@ class DashboardViewModelVpnActionTest {
             sendWolUseCase = mockk(relaxed = true),
             sendSoftSleepUseCase = mockk(relaxed = true),
             sendSuspendUseCase = mockk(relaxed = true),
-            checkNasStatusUseCase = mockk(relaxed = true)
+            checkNasStatusUseCase = mockk(relaxed = true),
+            getCurrentUptimeUseCase = mockk(relaxed = true),
+            getMyPowerPermissionsUseCase = mockk(relaxed = true),
+            sendWakeUseCase = mockk(relaxed = true)
         )
     }
 
