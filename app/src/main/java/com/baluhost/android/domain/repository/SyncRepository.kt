@@ -134,4 +134,9 @@ interface SyncRepository {
      * Enable a sync schedule.
      */
     suspend fun enableSyncSchedule(scheduleId: Int): Result<Unit>
+
+    /**
+     * Check if sync is currently allowed (sleep-aware preflight).
+     */
+    suspend fun getSyncPreflight(): Result<SyncPreflightResponse>
 }

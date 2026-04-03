@@ -239,3 +239,18 @@ data class RemoteFileInfo(
     val hash: String,
     val modifiedAt: Long  // Timestamp in milliseconds
 )
+
+data class SyncPreflightResponse(
+    val syncAllowed: Boolean,
+    val currentSleepState: String,
+    val sleepSchedule: SleepScheduleInfo?,
+    val nextWakeAt: String?,
+    val blockReason: String?
+)
+
+data class SleepScheduleInfo(
+    val enabled: Boolean,
+    val sleepTime: String,
+    val wakeTime: String,
+    val mode: String
+)

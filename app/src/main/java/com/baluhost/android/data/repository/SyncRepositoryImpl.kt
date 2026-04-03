@@ -326,6 +326,30 @@ class SyncRepositoryImpl @Inject constructor(
             Result.failure(e)
         }
     }
+
+    override suspend fun getSyncPreflight(): Result<SyncPreflightResponse> {
+        return try {
+            val dto = syncApi.getSyncPreflight()
+            Result.success(
+                SyncPreflightResponse(
+                    syncAllowed = dto.syncAllowed,
+                    currentSleepState = dto.currentSleepState,
+                    sleepSchedule = dto.sleepSchedule?.let {
+                        SleepScheduleInfo(
+                            enabled = it.enabled,
+                            sleepTime = it.sleepTime,
+                            wakeTime = it.wakeTime,
+                            mode = it.mode
+                        )
+                    },
+                    nextWakeAt = dto.nextWakeAt,
+                    blockReason = dto.blockReason
+                )
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
 }
 
 /**
