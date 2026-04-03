@@ -6,6 +6,7 @@ import com.baluhost.android.data.network.WolResult
 import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.data.remote.api.SleepApi
+import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.repository.PowerRepository
 import com.baluhost.android.util.Result
 import kotlinx.coroutines.flow.first
@@ -66,6 +67,37 @@ class PowerRepositoryImpl @Inject constructor(
             }
         } catch (e: HttpException) {
             Result.Error(Exception("Suspend fehlgeschlagen: ${e.message()}", e))
+        } catch (e: Exception) {
+            Result.Error(Exception("Server nicht erreichbar", e))
+        }
+    }
+
+    override suspend fun getMyPermissions(): Result<PowerPermissions> {
+        return try {
+            val dto = sleepApi.getMyPermissions()
+            Result.Success(PowerPermissions(
+                canSoftSleep = dto.canSoftSleep,
+                canWake = dto.canWake,
+                canSuspend = dto.canSuspend,
+                canWol = dto.canWol
+            ))
+        } catch (e: HttpException) {
+            Result.Error(Exception("Berechtigungen konnten nicht geladen werden: ${e.message()}", e))
+        } catch (e: Exception) {
+            Result.Error(Exception("Server nicht erreichbar", e))
+        }
+    }
+
+    override suspend fun sendWake(): Result<String> {
+        return try {
+            val response = sleepApi.sendWake()
+            if (response.success) {
+                Result.Success(response.message)
+            } else {
+                Result.Error(Exception(response.message))
+            }
+        } catch (e: HttpException) {
+            Result.Error(Exception("Wake fehlgeschlagen: ${e.message()}", e))
         } catch (e: Exception) {
             Result.Error(Exception("Server nicht erreichbar", e))
         }

@@ -59,3 +59,14 @@ data class PowerActionResponse(
     val success: Boolean,
     val message: String
 )
+
+data class MyPowerPermissionsDto(
+    @SerializedName("can_soft_sleep")
+    val canSoftSleep: Boolean = false,
+    @SerializedName("can_wake")
+    val canWake: Boolean = false,
+    @SerializedName("can_suspend")
+    val canSuspend: Boolean = false,
+    @SerializedName("can_wol")
+    val canWol: Boolean = false
+)
