@@ -49,3 +49,6 @@ release/
 
 # Signing files
 .signing/
+
+.env
+.env
