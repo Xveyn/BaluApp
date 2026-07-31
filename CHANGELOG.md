@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI/CD rework: `ci.yml` now runs on every push to `development` (in addition
+  to PRs to `main`) with auto-merge gated on the event type, a `concurrency`
+  group to cancel superseded runs, and scoped-down `permissions` reasoning.
+  `release.yml` now builds from tags instead of pushes to `main`, deriving
+  `versionName`/`versionCode` from the tag and gating the build on tests
+  passing, the tag being reachable from `main`, and a matching `CHANGELOG.md`
+  section. Hardened the tag regex to reject leading-zero components and
+  `v0.0.0`, isolated the signed release build from the shared Gradle build
+  cache, added a post-build check that the APK's `versionName` matches the
+  tag, made the GitHub release publish as a draft-then-publish so a failed
+  asset upload can't strand a public, empty release, and made the `main`
+  fetch's refspec explicit.
+
 ## [1.0.0] - 2026-07-31
 
 ### Added

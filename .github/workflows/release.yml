@@ -19,7 +19,11 @@ jobs:
         id: version
         run: |
           TAG="${GITHUB_REF_NAME}"
-          if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+          # Each component must be "0" or start with a non-zero digit (SemVer's own
+          # rule). A bare [0-9]+ would let bash arithmetic below treat a leading
+          # zero as octal (v1.08.0 -> parse error) or silently collide versions
+          # (v1.007.0 -> the same code as v1.7.0).
+          if [[ ! "$TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
             echo "::error::Tag '$TAG' is not of the form v<major>.<minor>.<patch>"
             exit 1
           fi
@@ -30,13 +34,20 @@ jobs:
             echo "::error::minor and patch must stay below 100, or the versionCode formula loses monotonicity"
             exit 1
           fi
+          if (( MAJOR == 0 && MINOR == 0 && PATCH == 0 )); then
+            echo "::error::v0.0.0 would produce versionCode 0, which AGP accepts but the Play Store rejects"
+            exit 1
+          fi
           echo "name=${MAJOR}.${MINOR}.${PATCH}" >> "$GITHUB_OUTPUT"
           echo "code=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       - name: Verify the tag is reachable from main
         run: |
-          git fetch origin main
+          # Explicit refspec: relying on actions/checkout's default refspec means a
+          # missing ref would fail merge-base with a misleading "not reachable"
+          # verdict instead of the real cause.
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
           if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
             echo "::error::The tagged commit is not reachable from main — refusing to release from a side branch"
             exit 1
@@ -45,9 +56,12 @@ jobs:
       - name: Extract release notes from the changelog
         run: |
           NAME="${{ steps.version.outputs.name }}"
+          # Stops at the next "## [" heading, or at a link-reference-definition line
+          # ("[1.0.0]: https://...") once the changelog grows those at the bottom —
+          # otherwise the oldest version's section would run to EOF and swallow them.
           awk -v v="## [$NAME]" '
             index($0, v) == 1 { found=1; next }
-            found && /^## \[/ { exit }
+            found && (/^## \[/ || /^\[/) { exit }
             found { print }
           ' CHANGELOG.md > release-notes.md
           if [ -z "$(tr -d '[:space:]' < release-notes.md)" ]; then
@@ -84,6 +98,10 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/baluhost-release.jks
 
+      # --no-build-cache here too: setup-gradle's shared build cache can be
+      # populated by any run in this repo (e.g. an unrelated development push),
+      # and this is the one build whose compiled/dexed/R8'd output is signed and
+      # handed to users. It must not inherit outputs from a cache it didn't build.
       - name: Build release APK
         env:
           KEYSTORE_PATH: baluhost-release.jks
@@ -91,15 +109,29 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: >
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --no-build-cache
           -PappVersionName=${{ steps.version.outputs.name }}
           -PappVersionCode=${{ steps.version.outputs.code }}
+
+      - name: Verify the APK carries the tag's version
+        run: |
+          BADGING=$("$ANDROID_HOME"/build-tools/*/aapt2 dump badging app/build/outputs/apk/release/app-release.apk)
+          echo "$BADGING" | grep -q "versionName='${{ steps.version.outputs.name }}'" \
+            || { echo "::error::APK versionName does not match ${{ steps.version.outputs.name }}"; exit 1; }
 
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" \
-            app/build/outputs/apk/release/app-release.apk \
-            --title "Release ${{ steps.version.outputs.name }}" \
-            --notes-file release-notes.md
+          TAG="${{ steps.version.outputs.tag }}"
+          NAME="${{ steps.version.outputs.name }}"
+          # Create as a draft, upload the asset, then publish. "gh release create"
+          # with an asset does both steps internally — if the upload half fails
+          # (transient network, a 30-40 MB APK), the release is already public and
+          # empty, and re-running dies at "create" with "release already exists"
+          # since it can never repair itself. A draft is invisible to users and
+          # safe to retry into.
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --draft --title "Release $NAME" --notes-file release-notes.md
+          gh release upload "$TAG" app/build/outputs/apk/release/app-release.apk --clobber
+          gh release edit "$TAG" --draft=false

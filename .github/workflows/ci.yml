@@ -6,9 +6,18 @@ on:
   push:
     branches: [development]
 
+# contents: write and pull-requests: write are only needed by the "Enable
+# auto-merge" step below (gh pr merge). Kept workflow-wide deliberately rather
+# than scoped to the job, since the other steps only read.
 permissions:
   contents: write
   pull-requests: write
+
+# A burst of pushes to development would otherwise queue N full Gradle builds;
+# cancel superseded runs for the same ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:

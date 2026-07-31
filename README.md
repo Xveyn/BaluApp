@@ -150,7 +150,16 @@ as `major * 10000 + minor * 100 + patch`.
 1. Collect changes under `## [Unreleased]` in `CHANGELOG.md` as you go.
 2. To release, rename that section to `## [1.2.3] - YYYY-MM-DD` and put a fresh
    empty `## [Unreleased]` above it.
-3. Get the commit onto `main`.
+3. Merge the commit into `main`, then switch to it locally:
+
+```bash
+git checkout main
+git pull
+```
+
+   The release workflow checks that the tagged commit is reachable from
+   `main`. Tagging straight off `development` (the branch you likely worked
+   on) fails that check.
 4. Tag and push:
 
 ```bash
@@ -164,7 +173,19 @@ version, or if the tests fail. The extracted changelog section becomes the
 release notes.
 
 Minor and patch must stay below 100, or the `versionCode` formula loses its
-monotonicity.
+monotonicity. `v0.0.0` is rejected outright, since it would produce
+`versionCode = 0`.
+
+### If a release run fails partway
+
+The release is created as a draft and only published after the APK uploads
+successfully, so a failed run should leave nothing visible — but to clean up
+and retry from scratch:
+
+1. Delete the remote tag: `git push --delete origin v1.2.3`
+2. Delete any release that got created (draft or published) for that tag, on
+   the GitHub Releases page or via `gh release delete v1.2.3`.
+3. Fix the underlying problem, then re-tag and push as above.
 
 ## Security
 
