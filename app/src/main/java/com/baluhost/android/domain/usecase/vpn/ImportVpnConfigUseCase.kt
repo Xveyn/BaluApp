@@ -1,9 +1,9 @@
 package com.baluhost.android.domain.usecase.vpn
 
-import android.util.Base64
 import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.model.VpnConfig
+import com.baluhost.android.util.Base64Decoder
 import com.baluhost.android.util.Result
 import com.baluhost.android.util.WireGuardConfigParser
 import javax.inject.Inject
@@ -15,13 +15,14 @@ import javax.inject.Inject
  * and prepares for Android VPN Service registration.
  */
 class ImportVpnConfigUseCase @Inject constructor(
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val base64Decoder: Base64Decoder
 ) {
-    
+
     suspend operator fun invoke(configBase64: String): Result<VpnConfig> {
         return try {
             val configString = String(
-                Base64.decode(configBase64, Base64.DEFAULT),
+                base64Decoder.decode(configBase64),
                 Charsets.UTF_8
             )
 
