@@ -1,10 +1,10 @@
 # Remote Data Source
 
-Everything that talks HTTP to the BaluHost server: Retrofit interfaces (`api/`), the JSON payloads they move (`dto/`, `dto/sync/`), and the OkHttp interceptors that sit in front of every call (`interceptors/`). This layer never touches the domain models directly — repositories in `data/repository/` are the only callers and are responsible for mapping DTOs into domain types.
+Everything that talks HTTP to the BaluHost server: Retrofit interfaces (`api/`), the JSON payloads they move (`dto/`, `dto/sync/`), and the OkHttp interceptors that sit in front of every call (`interceptors/`). This layer never touches the domain models directly. The intent is that repositories in `data/repository/` are the only callers, responsible for mapping DTOs into domain types; in practice 21 of the 55 use cases in `domain/usecase/` import `data.remote.api` directly instead, and 11 import `data.remote.dto` directly — see `domain/usecase/CLAUDE.md` for the breakdown.
 
 ## Structure
 
-- `api/` — 14 Retrofit interfaces, one per server feature area. Interface names mirror the server's route groups (`ActivityApi` ↔ `/activity/*`, `VpnApi` ↔ `/vpn/*`), so the fastest way to find where an endpoint is called is to search the interface whose name matches the route prefix.
+- `api/` — 14 files, 13 Retrofit interfaces, one per server feature area (`MobileApiFactory.kt` is the one file that isn't — see the table below). Interface names mirror the server's route groups (`ActivityApi` ↔ `/activity/*`, `VpnApi` ↔ `/vpn/*`), so the fastest way to find where an endpoint is called is to search the interface whose name matches the route prefix.
 - `dto/` — 19 files of request/response payloads, plus the `dto/sync/` subfolder (`ChunkedUploadDto.kt`, `SyncDto.kt`, `SyncPreflightDto.kt`, `SyncScheduleDto.kt`) for the sync/upload-queue payloads specifically. DTOs are grouped by feature, not 1:1 with API files — e.g. the types `SleepApi` returns (`PowerActionResponse`, `MyPowerPermissionsDto`, `DesktopStatusDto`, `DesktopActionResponseDto`) live in `PowerDto.kt`; there is no separate sleep-specific DTO file, so don't assume an API interface's name tells you which DTO file to open.
 - `interceptors/` — 5 OkHttp interceptors wired into the client in `di/NetworkModule.kt`.
 

@@ -1,6 +1,6 @@
 # Use Cases
 
-55 files across ten subdirectories, plus one top-level orchestrator (`OfflineQueueManager.kt`). Each subdirectory groups the actions for one feature area — `power/`, `system/`, `notification/`, `files/`, `shares/`, `vpn/`, `plugin/`, `activity/`, `auth/`, `cache/` — and each file is normally a single callable action injected straight into a ViewModel. This is the layer ViewModels talk to; it exists so a ViewModel test can stub one narrow interface instead of an entire `*Api` or `*Repository`.
+55 files total: 54 across ten subdirectories, plus one top-level orchestrator (`OfflineQueueManager.kt`). Each subdirectory groups the actions for one feature area — `power/`, `system/`, `notification/`, `files/`, `shares/`, `vpn/`, `plugin/`, `activity/`, `auth/`, `cache/` — and each file is normally a single callable action injected straight into a ViewModel. This is the layer ViewModels talk to; it exists so a ViewModel test can stub one narrow interface instead of an entire `*Api` or `*Repository`.
 
 ## Core concepts
 

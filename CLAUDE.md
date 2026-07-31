@@ -66,8 +66,8 @@ app/src/main/java/com/baluhost/android/
 │   │                           #   exception for SAF URIs
 │   ├── repository/             # 12 repository interfaces, bound in di/RepositoryModule.kt
 │   ├── repo/                   # LocalStorageRepository.kt only — legacy, see below (1)
-│   ├── usecase/                # 55 files in ten feature subdirectories, plus
-│   │                           #   OfflineQueueManager.kt
+│   ├── usecase/                # 54 files in ten feature subdirectories, plus
+│   │                           #   OfflineQueueManager.kt (55 total)
 │   ├── adapter/                # CloudAdapter.kt — the storage-adapter interface (1)
 │   └── service/                # ConflictDetectionService.kt — sync conflict detection (1)
 ├── presentation/
@@ -90,24 +90,16 @@ pitfalls this codebase keeps producing — relaxed mocks that return empty flows
 unbounded ViewModel polling loops that make `runTest` never finish, `android.util.*`
 returning `null` under plain JUnit. They are not repeated here.
 
-**The one thing that must not be missed: a green test run here can mean nothing.**
-`gradle.properties` sets `org.gradle.caching=true`, so a bare
-
-```
-./gradlew testDebugUnitTest
-```
-
-can report `BUILD SUCCESSFUL in 1s` with `FROM-CACHE` or `UP-TO-DATE` **without
-executing a single test**. Gradle also prints **no test count when everything
-passes** — only on failure — so there is nothing in a successful run's output that
-distinguishes "23 test classes passed" from "nothing ran." Always verify with:
+**The one thing that must not be missed: a green test run here can mean nothing** —
+Gradle's build cache can report `BUILD SUCCESSFUL` without executing a single test,
+and prints no test count when everything passes. Always verify with:
 
 ```
 ./gradlew cleanTestDebugUnitTest testDebugUnitTest --no-build-cache
 ```
 
-Both CI workflows pass `--no-build-cache` for exactly this reason. To confirm a run
-actually happened, count the XML results — the command is in `app/src/test/CLAUDE.md`.
+To confirm a run actually happened, count the XML results — the command, and the
+full explanation of why this trap exists, are in `app/src/test/CLAUDE.md`.
 
 There is **no `androidTest` source set**: no instrumented or Compose UI tests exist,
 and no coverage report is configured, regardless of what `README.md` still says.
@@ -175,8 +167,9 @@ than no guide, because it is still trusted.
 ### Data layer (`app/src/main/java/com/baluhost/android/data/`)
 - `remote/CLAUDE.md` — Retrofit interfaces per server route group, DTO/`@SerializedName`
   conventions and the silent-default trap, the five OkHttp interceptors
-- `repository/CLAUDE.md` — the `Result<T>` pattern and its four documented exceptions,
-  error mapping that distinguishes "rejected" from "unreachable"
+- `repository/CLAUDE.md` — the `Result<T>` pattern, its documented exceptions, and the
+  two unrelated `Result` types that share the name; error mapping that distinguishes
+  "rejected" from "unreachable"
 - `local/CLAUDE.md` — Room, DataStore's string-encoded booleans, and why credentials
   belong in `security/` and nowhere else
 

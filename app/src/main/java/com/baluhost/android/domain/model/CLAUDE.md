@@ -1,6 +1,6 @@
 # Domain Models
 
-The 26 types the rest of the app builds on: plain Kotlin `data class`es and `enum class`es representing files, power state, sync configuration, VPN config, notifications, and system telemetry. Repositories map server DTOs into these on the way in (see `data/repository/CLAUDE.md`'s "Core pattern"); ViewModels and use cases only ever see these, never the DTOs underneath. The point is to keep the domain layer testable without a device or a real server — a plain JUnit test can construct any of these with `MyModel(...)`.
+The 26 types the rest of the app builds on: plain Kotlin `data class`es and `enum class`es representing files, power state, sync configuration, VPN config, notifications, and system telemetry. Repositories map server DTOs into these on the way in (see `data/repository/CLAUDE.md`'s "Core pattern"). The intent is that ViewModels and use cases only ever see these, never the DTOs underneath; in practice 11 use cases import `data.remote.dto` directly (`GetNotificationPreferencesUseCase` returns a raw `NotificationPreferencesDto` straight to its ViewModel), and `AuthRepository`/`NotificationRepository` themselves declare DTO types in their domain-layer signatures — see `domain/usecase/CLAUDE.md` for the breakdown. The point is to keep the domain layer testable without a device or a real server — a plain JUnit test can construct any of these with `MyModel(...)`.
 
 ## Core concepts
 
