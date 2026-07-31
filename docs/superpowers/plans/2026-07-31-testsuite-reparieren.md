@@ -798,9 +798,93 @@ Wurde auch `VpnViewModel.kt` geändert, gehört sie mit in denselben `git add`.
 
 ---
 
+### Task 9: FilesViewModelTest — verbleibende Zustands- und Timing-Fehlschläge
+
+Nach Task 3 waren in dieser Klasse noch vier Fehlschläge übrig. Einen davon hat Task 5 erledigt (Textdrift). Die drei hier waren vorher vom `NoSuchElementException` **verdeckt** und wurden von Task 3 nicht verursacht — das hat dessen Review ausdrücklich geprüft.
+
+Wie Task 8 ist dies eine **Untersuchungs-Task ohne vorgegebene Lösung**.
+
+**Files:**
+- Modify: `app/src/test/java/com/baluhost/android/presentation/ui/screens/files/FilesViewModelTest.kt`
+- Ggf. modify: `app/src/main/java/com/baluhost/android/presentation/ui/screens/files/FilesViewModel.kt` — nur, wenn die Ursache dort liegt
+
+**Interfaces:**
+- Consumes: die Stub-Reparatur aus Task 3
+- Produces: nichts, was andere Tasks nutzen
+
+Die drei Fehlschläge:
+
+| Test | Fehler |
+|---|---|
+| `loadFiles should update state with file list` | `AssertionError: expected:<1> but was:<0>` |
+| `deleteFile should refresh list on success` | `TurbineAssertionError: No value produced in 3s` |
+| `uploadFile should track progress and refresh on success` | nackter `AssertionError` |
+
+- [ ] **Step 1: Reproduzieren**
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain --tests "com.baluhost.android.presentation.ui.screens.files.FilesViewModelTest"`
+
+Erwartet: 3 Fehlschläge, genau die obigen. Alle anderen Tests der Klasse sind grün.
+
+- [ ] **Step 2: Die naheliegende Hypothese zuerst prüfen — Anzahl der State-Emissionen**
+
+Alle drei Tests arbeiten nach demselben Muster:
+
+```kotlin
+        viewModel.uiState.test {
+            skipItems(1)
+            // ... Aktion ...
+            testDispatcher.scheduler.advanceUntilIdle()
+            skipItems(1) // Loading state
+            val state = awaitItem()
+```
+
+`skipItems(n)` überspringt eine **fest verdrahtete** Anzahl von Emissionen. Bis Task 3 brach der `init`-Block früh mit `NoSuchElementException` ab; seitdem läuft er vollständig durch und erzeugt dadurch möglicherweise eine andere Anzahl von `uiState`-Emissionen. Dann überspringen diese Tests das falsche Element und warten anschließend auf eines, das nie kommt — was exakt zu „No value produced in 3s" und zu „expected:<1> but was:<0>" passt.
+
+Prüfe das, statt es anzunehmen: lass dir in einem der drei Tests die tatsächlich ankommenden `uiState`-Werte ausgeben, bevor du irgendetwas änderst, und halte die Sequenz im Report fest.
+
+- [ ] **Step 3: Reparieren, was die Messung zeigt**
+
+Bestätigt sich Step 2, ist die robuste Korrektur, **nicht** einfach die `skipItems`-Zahl hochzudrehen — das wäre wieder eine fest verdrahtete Annahme, die beim nächsten `init`-Umbau bricht. Warte stattdessen auf den Zustand, der die Bedingung erfüllt, etwa indem du bis zum ersten Element mit `!isLoading` konsumierst.
+
+Trifft Step 2 nicht zu, folge dem, was die Messung tatsächlich zeigt, und beschreibe im Report, welche Hypothese du daraus gebildet hast.
+
+- [ ] **Step 4: Produktivcode nur bei echtem Bug ändern**
+
+Ergibt die Untersuchung, dass das `FilesViewModel` selbst fehlerhaft ist — etwa einen Zustand nie veröffentlicht, den es veröffentlichen müsste —, dann repariere das **nicht** nebenbei. Melde es im Report; es ist dann ein Produktbug und keine Testreparatur.
+
+- [ ] **Step 5: Klasse laufen lassen**
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain --tests "com.baluhost.android.presentation.ui.screens.files.FilesViewModelTest"`
+
+Erwartet: BUILD SUCCESSFUL, 9/9 grün.
+
+Bekommst du sie nicht grün: **BLOCKED melden.** Kein `@Ignore`, keine gelöschten Tests, keine hochgedrehte Timeout-Zahl als Umgehung.
+
+- [ ] **Step 6: Volle Suite, zweimal**
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain` — und danach ein zweites Mal.
+
+Erwartet: **`102 tests completed, 0 failed`** in beiden Läufen, sofern Task 8 bereits erledigt ist. Zwei Läufe, weil diese Suite nachweislich schwankt.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add app/src/test/java/com/baluhost/android/presentation/ui/screens/files/FilesViewModelTest.kt
+git commit -m "test(files): wait for the settled state instead of a fixed emission count"
+```
+
+Passe die Message an, falls die Ursache eine andere war.
+
+---
+
 ## Nach Abschluss
 
-Der Plan ist erledigt, wenn `.\gradlew.bat testDebugUnitTest` grün durchläuft und `.\gradlew.bat assembleDebug` baut. Danach:
+Der Plan ist erledigt, wenn `.\gradlew.bat testDebugUnitTest` grün durchläuft und `.\gradlew.bat assembleDebug` baut.
+
+> **Nachtrag: Tasks 8 und 9 kamen während der Ausführung dazu.** Beide behandeln Defekte, die erst sichtbar wurden, nachdem Task 1 die OOM-Abstürze beseitigt hatte — solange die Test-JVM starb, waren die darunterliegenden Fehler nicht messbar. Genau darum steht die Neuvermessung als eigene Task 2 im Plan. Die Aussage in Task 7 Step 7, die Suite müsse dort bereits null Fehlschläge zeigen, stammt aus der ursprünglichen Fassung und ist überholt: nach Task 7 sind es 11, die Tasks 8 und 9 räumen sie ab.
+
+Danach:
 
 1. CI prüfen (`gh run list`) — der `-Xmx4g`-Parameter im Workflow adressiert die Daemon-JVM, nicht die Test-JVM; ob er nach Task 1 noch nötig ist, kann dann entschieden werden.
 2. Den pausierten Feature-Plan `docs/superpowers/plans/2026-07-31-app-desktop-toggle-gaming-mode.md` bei Task 1 wieder aufnehmen. Sein Ledger liegt unter `.superpowers/sdd/2026-07-31-app-desktop-toggle-gaming-mode/progress.md`; die dort notierte BASE ist überholt und muss neu bestimmt werden.
