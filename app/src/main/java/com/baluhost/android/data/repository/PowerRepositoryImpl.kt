@@ -3,6 +3,8 @@ package com.baluhost.android.data.repository
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.network.FritzBoxTR064Client
 import com.baluhost.android.data.network.WolResult
+import com.baluhost.android.domain.model.DesktopActionResult
+import com.baluhost.android.domain.model.DesktopState
 import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.data.remote.api.SleepApi
@@ -79,7 +81,9 @@ class PowerRepositoryImpl @Inject constructor(
                 canSoftSleep = dto.canSoftSleep,
                 canWake = dto.canWake,
                 canSuspend = dto.canSuspend,
-                canWol = dto.canWol
+                canWol = dto.canWol,
+                canToggleDesktop = dto.canToggleDesktop,
+                canUnlockSession = dto.canUnlockSession
             ))
         } catch (e: HttpException) {
             Result.Error(Exception("Berechtigungen konnten nicht geladen werden: ${e.message()}", e))
@@ -98,6 +102,46 @@ class PowerRepositoryImpl @Inject constructor(
             }
         } catch (e: HttpException) {
             Result.Error(Exception("Wake fehlgeschlagen: ${e.message()}", e))
+        } catch (e: Exception) {
+            Result.Error(Exception("Server nicht erreichbar", e))
+        }
+    }
+
+    override suspend fun getDesktopStatus(): Result<DesktopState> {
+        return try {
+            Result.Success(DesktopState.fromApi(sleepApi.getDesktopStatus().state))
+        } catch (e: HttpException) {
+            Result.Error(Exception("Desktop-Status nicht abrufbar: ${e.message()}", e))
+        } catch (e: Exception) {
+            Result.Error(Exception("Server nicht erreichbar", e))
+        }
+    }
+
+    override suspend fun enableDesktop(): Result<DesktopActionResult> {
+        return try {
+            val response = sleepApi.enableDesktop()
+            if (response.success) {
+                Result.Success(DesktopActionResult(response.message, response.sessionUnlocked))
+            } else {
+                Result.Error(Exception(response.message))
+            }
+        } catch (e: HttpException) {
+            Result.Error(Exception("Displays einschalten fehlgeschlagen: ${e.message()}", e))
+        } catch (e: Exception) {
+            Result.Error(Exception("Server nicht erreichbar", e))
+        }
+    }
+
+    override suspend fun disableDesktop(): Result<String> {
+        return try {
+            val response = sleepApi.disableDesktop()
+            if (response.success) {
+                Result.Success(response.message)
+            } else {
+                Result.Error(Exception(response.message))
+            }
+        } catch (e: HttpException) {
+            Result.Error(Exception("Displays ausschalten fehlgeschlagen: ${e.message()}", e))
         } catch (e: Exception) {
             Result.Error(Exception("Server nicht erreichbar", e))
         }

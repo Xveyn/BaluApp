@@ -30,7 +30,13 @@ import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.model.WolAvailability
+import com.baluhost.android.domain.model.DesktopState
+import com.baluhost.android.domain.usecase.plugin.IsGamingModeAvailableUseCase
+import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
+import com.baluhost.android.domain.usecase.power.DisableDesktopUseCase
+import com.baluhost.android.domain.usecase.power.EnableDesktopUseCase
+import com.baluhost.android.domain.usecase.power.GetDesktopStatusUseCase
 import com.baluhost.android.domain.usecase.power.GetMyPowerPermissionsUseCase
 import com.baluhost.android.domain.usecase.power.SendWakeUseCase
 import com.baluhost.android.domain.usecase.power.SendWolUseCase
@@ -74,7 +80,12 @@ class DashboardViewModel @Inject constructor(
     private val sendSuspendUseCase: SendSuspendUseCase,
     private val checkNasStatusUseCase: CheckNasStatusUseCase,
     private val getMyPowerPermissionsUseCase: GetMyPowerPermissionsUseCase,
-    private val sendWakeUseCase: SendWakeUseCase
+    private val sendWakeUseCase: SendWakeUseCase,
+    private val getDesktopStatusUseCase: GetDesktopStatusUseCase,
+    private val enableDesktopUseCase: EnableDesktopUseCase,
+    private val disableDesktopUseCase: DisableDesktopUseCase,
+    private val isGamingModeAvailableUseCase: IsGamingModeAvailableUseCase,
+    private val startGamingModeUseCase: StartGamingModeUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -109,6 +120,12 @@ class DashboardViewModel @Inject constructor(
 
     private val _wolAvailability = MutableStateFlow(WolAvailability.NOT_NEEDED)
     val wolAvailability: StateFlow<WolAvailability> = _wolAvailability.asStateFlow()
+
+    private val _desktopState = MutableStateFlow(DesktopState.UNKNOWN)
+    val desktopState: StateFlow<DesktopState> = _desktopState.asStateFlow()
+
+    private val _gamingModeAvailable = MutableStateFlow(false)
+    val gamingModeAvailable: StateFlow<Boolean> = _gamingModeAvailable.asStateFlow()
 
     private val _snackbarEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
@@ -446,7 +463,8 @@ class DashboardViewModel @Inject constructor(
                     if (_isAdmin.value) {
                         _powerPermissions.value = PowerPermissions(
                             canSoftSleep = true, canWake = true,
-                            canSuspend = true, canWol = true
+                            canSuspend = true, canWol = true,
+                            canToggleDesktop = true, canUnlockSession = true
                         )
                     }
                     Log.w("DashboardViewModel", "Failed to load power permissions", result.exception)
@@ -545,6 +563,135 @@ class DashboardViewModel @Inject constructor(
                     startPolling()
                 }
                 is Result.Error -> _snackbarEvent.emit(result.exception.message ?: "Wake fehlgeschlagen")
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    /**
+     * Refreshes what the power dialog needs to decide which desktop entries to
+     * show. Called when the dialog opens, the way the webapp refetches on every
+     * dropdown open — the previous values stay put while this runs, so the
+     * entries do not flicker.
+     */
+    fun onPowerDialogOpened() {
+        // Nothing in the ONLINE branch of the power dialog is rendered for any
+        // other status, and a desktop-status call against an offline/sleeping
+        // server can only time out — so skip it entirely.
+        if (_nasStatus.value != NasStatus.ONLINE) return
+        viewModelScope.launch {
+            when (val result = getDesktopStatusUseCase()) {
+                is Result.Success -> _desktopState.value = result.data
+                is Result.Error -> {
+                    // No snackbar: this is a discovery call, and UNKNOWN simply
+                    // means the desktop entry is not offered.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    Log.w("DashboardViewModel", "Failed to load desktop status", result.exception)
+                }
+                else -> {}
+            }
+            // gamingModeAvailable means "may be shown" — it is set explicitly in
+            // both branches so a non-admin's `false` is a decision, not a value
+            // left stale by omission. The plugin menu-action route is
+            // admin-only server-side, so asking on anyone else's behalf could
+            // only ever produce a 403; non-admins simply never get to see it.
+            _gamingModeAvailable.value = if (_isAdmin.value) {
+                isGamingModeAvailableUseCase()
+            } else {
+                false
+            }
+        }
+    }
+
+    fun enableDesktop() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = enableDesktopUseCase()) {
+                is Result.Success -> {
+                    _desktopState.value = DesktopState.RUNNING
+                    // One emission only: two consecutive snackbars for a single
+                    // user action would be poor UX, and the lock-screen state is
+                    // a qualifier on the same outcome, not a separate event, so
+                    // it belongs folded into this one message. (With
+                    // extraBufferCapacity = 1 and the default
+                    // BufferOverflow.SUSPEND, a second emit here would not be
+                    // dropped anyway — it would suspend until collected, which
+                    // would delay the _powerActionInProgress reset below. That
+                    // path is not reachable since we only ever emit once, but
+                    // it is a second, independent reason to keep it that way.)
+                    _snackbarEvent.emit(
+                        if (result.data.sessionUnlocked == false) {
+                            "Displays an – Session ist noch gesperrt"
+                        } else {
+                            "Displays aktiviert"
+                        }
+                    )
+                }
+                is Result.Error -> {
+                    // A failed action means the app no longer knows the truth —
+                    // e.g. the documented partial failure "Displays sind an,
+                    // aber Steam startete nicht" lands here too, so a prior
+                    // STOPPED would now be a lie. UNKNOWN hides the entry until
+                    // the next refresh resolves it, which is strictly better
+                    // than keeping a belief that may be wrong.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    _snackbarEvent.emit(
+                        result.exception.message ?: "Displays einschalten fehlgeschlagen"
+                    )
+                }
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    fun disableDesktop() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = disableDesktopUseCase()) {
+                is Result.Success -> {
+                    _desktopState.value = DesktopState.STOPPED
+                    _snackbarEvent.emit("Displays deaktiviert")
+                }
+                is Result.Error -> {
+                    // See enableDesktop(): a failed action means the app no
+                    // longer knows the truth, so fall back to UNKNOWN rather
+                    // than keep a belief that may now be wrong.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    _snackbarEvent.emit(
+                        result.exception.message ?: "Displays ausschalten fehlgeschlagen"
+                    )
+                }
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    fun startGamingMode() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = startGamingModeUseCase()) {
+                is Result.Success -> {
+                    // The action turns the displays on before it launches Big
+                    // Picture, so the toggle below it must not offer "enable".
+                    _desktopState.value = DesktopState.RUNNING
+                    // The plugin words its own outcome; the use case has already
+                    // resolved it to German.
+                    _snackbarEvent.emit(result.data)
+                }
+                is Result.Error -> {
+                    // The documented partial failure is "Displays sind an, aber
+                    // Steam startete nicht" — displays are on, only Steam
+                    // failed, so the prior desktopState (possibly STOPPED) is
+                    // now wrong. See enableDesktop(): fall back to UNKNOWN
+                    // rather than keep a belief that may be false.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    _snackbarEvent.emit(
+                        result.exception.message ?: "Gaming-Modus fehlgeschlagen"
+                    )
+                }
                 else -> {}
             }
             _powerActionInProgress.value = false

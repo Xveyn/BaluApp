@@ -3,7 +3,7 @@ package com.baluhost.android.domain.usecase.auth
 import android.os.Build
 import com.baluhost.android.BuildConfig
 import com.baluhost.android.data.local.datastore.PreferencesManager
-import com.baluhost.android.data.remote.api.MobileApi
+import com.baluhost.android.data.remote.api.MobileApiFactory
 import com.baluhost.android.data.remote.dto.DeviceInfoDto
 import com.baluhost.android.data.remote.dto.RegisterDeviceRequest
 import com.baluhost.android.domain.model.AuthResult
@@ -25,7 +25,7 @@ import javax.inject.Inject
  * 5. Return AuthResult with user and device info
  */
 class RegisterDeviceUseCase @Inject constructor(
-    private val mobileApi: MobileApi,
+    private val mobileApiFactory: MobileApiFactory,
     private val preferencesManager: PreferencesManager
 ) {
     
@@ -35,41 +35,22 @@ class RegisterDeviceUseCase @Inject constructor(
         deviceName: String = "${Build.MANUFACTURER} ${Build.MODEL}"
     ): Result<AuthResult> {
         return try {
-            // CRITICAL: Create a new Retrofit instance with the server URL from QR code
-            // The injected mobileApi uses BuildConfig.BASE_URL which is wrong for dynamic servers
-            val finalUrl = serverUrl.let { if (it.endsWith("/")) it else "$it/" } + "api/"
+            // The QR code names the server, so the client is built per call.
             android.util.Log.d("RegisterDevice", "Using server URL: $serverUrl")
-            android.util.Log.d("RegisterDevice", "Final base URL: $finalUrl")
-            
-            // Variable to hold the access token once registration succeeds
+
+            // Set once registration succeeds; the factory's interceptor reads it
+            // per request, so later calls on this client carry the token.
             var accessToken: String? = null
 
-            val okHttpClient = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
-                .addInterceptor { chain ->
-                    val requestBuilder = chain.request().newBuilder()
-                    android.util.Log.d("RegisterDevice", "Request URL: ${chain.request().url}")
-                    // Add auth header for post-registration calls (e.g., push-token)
-                    accessToken?.let {
-                        requestBuilder.header("Authorization", "Bearer $it")
-                    }
-                    chain.proceed(requestBuilder.build())
-                }
-                .build()
-            
-            val retrofit = retrofit2.Retrofit.Builder()
-                .baseUrl(finalUrl)
-                .client(okHttpClient)
-                .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
-                .build()
-            
-            val dynamicMobileApi = retrofit.create(com.baluhost.android.data.remote.api.MobileApi::class.java)
-            
+            val dynamicMobileApi = mobileApiFactory.create(serverUrl) { accessToken }
+
             val deviceInfo = DeviceInfoDto(
                 deviceName = deviceName,
                 deviceType = "android",
-                deviceModel = Build.MODEL,
+                // Build.MODEL is a Java platform type: null under plain JUnit without
+                // Robolectric, never null on a real device. The fallback exists so the
+                // registration path can be unit tested, and is inert in production.
+                deviceModel = Build.MODEL ?: "",
                 osVersion = "Android ${Build.VERSION.RELEASE}",
                 appVersion = BuildConfig.VERSION_NAME
             )

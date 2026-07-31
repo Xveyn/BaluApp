@@ -45,6 +45,11 @@ class SettingsViewModelNetworkTest {
         every { preferencesManager.isAutoVpnOnExternal() } returns flowOf(false)
         coEvery { preferencesManager.getHomeBssidOnce() } returns null
         every { networkMonitor.isCurrentlyWifiConnected() } returns true
+        // init also runs observeWifiState(), which collects this property
+        // (SettingsViewModel.kt:281). networkMonitor is a strict mock, so an
+        // unstubbed access throws inside viewModelScope — surfacing as
+        // UncaughtExceptionsBeforeTest rather than as a readable failure.
+        every { networkMonitor.isWifiConnected } returns flowOf(true)
 
         viewModel = SettingsViewModel(
             deviceRepository = mockk(relaxed = true),

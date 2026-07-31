@@ -1,5 +1,6 @@
 package com.baluhost.android.presentation.ui.screens.vpn
 
+import androidx.lifecycle.ViewModelStore
 import app.cash.turbine.test
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.usecase.vpn.ConnectVpnUseCase
@@ -18,47 +19,101 @@ import org.junit.Assert.*
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class VpnViewModelTest {
-    
+
     private lateinit var fetchVpnConfigUseCase: FetchVpnConfigUseCase
     private lateinit var connectVpnUseCase: ConnectVpnUseCase
     private lateinit var disconnectVpnUseCase: DisconnectVpnUseCase
+    private lateinit var vpnRepository: com.baluhost.android.domain.repository.VpnRepository
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var viewModel: VpnViewModel
     private lateinit var context: android.content.Context
-    
+
     private val testDispatcher = StandardTestDispatcher()
-    
+
+    // VpnViewModel.init{} starts an infinite `while (isActive) { ...; delay(3000) }`
+    // status-monitoring coroutine in viewModelScope. Because Dispatchers.Main is set to
+    // testDispatcher below, runTest{} adopts the same virtual-time scheduler as that
+    // coroutine. runTest{} advances its scheduler to idle when the test body finishes,
+    // and since the monitoring loop always has more scheduled work, that advance never
+    // terminates and exhausts the heap (regardless of configured heap size - this is
+    // what showed up as OutOfMemoryError inside kotlin-reflect's ProtoBuf parsing: just
+    // whatever large allocation happened to be in flight when the heap finally ran out).
+    // Routing every constructed ViewModel through a ViewModelStore lets us cancel its
+    // viewModelScope (via the public put()/clear() API, which invokes the package-private
+    // ViewModel.clear()) before each test's runTest{} block ends.
+    //
+    // DashboardViewModel has the same shape (an infinite `while (true) { delay(30_000); ... }`
+    // loop in viewModelScope), and DashboardViewModelVpnActionTest already solves this exact
+    // hazard with its own clearViewModel() helper, which reaches ViewModel.clear() via
+    // reflection. We use ViewModelStore here instead because put()/clear() reaches the same
+    // method through public API, but it's the same underlying fix for the same problem.
+    //
+    // ViewModelStore.put() only calls clear() on the previously-stored entry from
+    // Lifecycle 2.8 onward; this project pins 2.8.x (see app/build.gradle.kts). On an
+    // older Lifecycle version put() would not cancel anything, this fix would silently
+    // stop working, and the OOM described above would return.
+    private val viewModelStore = ViewModelStore()
+
+    private fun newViewModel(): VpnViewModel {
+        val vm = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, vpnRepository, preferencesManager, context)
+        viewModelStore.put("vpnViewModel", vm) // clears any previously stored VM's scope first
+        return vm
+    }
+
+    // The @After teardown's viewModelStore.clear() is not a substitute for calling it
+    // inside the test body: teardown runs after runTest{}'s terminal advanceUntilIdle(),
+    // which is exactly the step that hangs against the unbounded status-monitoring loop
+    // (see the comment on viewModelStore above). So the in-body call is load-bearing, and
+    // a test written without it would OOM with a misleading stacktrace. Wrapping it here
+    // means a new test using vpnTest{} cannot forget it.
+    private fun vpnTest(body: suspend TestScope.() -> Unit) = runTest {
+        try {
+            body()
+        } finally {
+            viewModelStore.clear()
+        }
+    }
+
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         fetchVpnConfigUseCase = mockk()
         connectVpnUseCase = mockk()
         disconnectVpnUseCase = mockk()
+        vpnRepository = mockk()
         preferencesManager = mockk()
         context = mockk(relaxed = true)
-        
+        val connectivityManager: android.net.ConnectivityManager = mockk(relaxed = true)
+        every { context.getSystemService(android.content.Context.CONNECTIVITY_SERVICE) } returns connectivityManager
+
         // Default: no VPN config
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
+        every { preferencesManager.getVpnType() } returns flowOf(null)
+        every { preferencesManager.getVpnAssignedIp() } returns flowOf(null)
+        every { preferencesManager.getVpnDeviceName() } returns flowOf(null)
         coEvery { fetchVpnConfigUseCase() } returns Result.Error(Exception("No config"))
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
+        coEvery { vpnRepository.getAvailableVpnTypes() } returns Result.Success(emptyList())
+        coEvery { vpnRepository.getCachedVpnConfig() } returns null
+
+        viewModel = newViewModel()
     }
-    
+
     @After
     fun teardown() {
+        viewModelStore.clear()
         Dispatchers.resetMain()
         clearAllMocks()
     }
-    
+
     @Test
-    fun `initial state should check for VPN config`() = runTest {
+    fun `initial state should check for VPN config`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config_string")
-        
+
         // When
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         // Then
         viewModel.uiState.test {
             val state = awaitItem()
@@ -66,175 +121,186 @@ class VpnViewModelTest {
             assertFalse(state.isConnected)
         }
     }
-    
+
     @Test
-    fun `initial state should show no config when missing`() = runTest {
+    fun `initial state should show no config when missing`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
-        
+
         // When
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         // Then
         viewModel.uiState.test {
             val state = awaitItem()
             assertFalse(state.hasConfig)
-            assertEquals("Keine VPN-Konfiguration gefunden", state.error)
+            // VpnViewModel.loadVpnConfig() reports the underlying failure reason rather
+            // than a static "no config" message; "No config" is fetchVpnConfigUseCase's
+            // stubbed exception message from setup().
+            assertEquals("Konfiguration konnte nicht geladen werden: No config", state.error)
         }
     }
-    
+
     @Test
-    fun `connect should transition to connected state on success`() = runTest {
+    fun `connect should transition to connected state on success`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         coEvery { connectVpnUseCase() } returns Result.Success(true)
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1) // Initial state
-            
+
             viewModel.connect()
-            testDispatcher.scheduler.advanceUntilIdle()
-            
+            testDispatcher.scheduler.runCurrent()
+
             // Then
             val loadingState = awaitItem()
             assertTrue(loadingState.isLoading)
-            
+
             val connectedState = awaitItem()
             assertTrue(connectedState.isConnected)
             assertFalse(connectedState.isLoading)
             assertNull(connectedState.error)
         }
     }
-    
+
     @Test
-    fun `connect should show error on failure`() = runTest {
+    fun `connect should show error on failure`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         val errorMessage = "VPN connection failed"
         coEvery { connectVpnUseCase() } returns Result.Error(Exception(errorMessage))
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.connect()
-            testDispatcher.scheduler.advanceUntilIdle()
-            
+            testDispatcher.scheduler.runCurrent()
+
             // Then
             skipItems(1) // Loading state
-            
+
             val errorState = awaitItem()
             assertFalse(errorState.isConnected)
             assertFalse(errorState.isLoading)
-            assertEquals(errorMessage, errorState.error)
+            // VpnViewModel.connect() prefixes the use case's exception message with
+            // "Verbindung fehlgeschlagen: " rather than surfacing it verbatim.
+            assertEquals("Verbindung fehlgeschlagen: $errorMessage", errorState.error)
         }
     }
-    
+
     @Test
-    fun `disconnect should transition to disconnected state on success`() = runTest {
+    fun `disconnect should transition to disconnected state on success`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         // Connect first
         coEvery { connectVpnUseCase() } returns Result.Success(true)
         viewModel.connect()
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        testDispatcher.scheduler.runCurrent()
+
         // Setup disconnect
         coEvery { disconnectVpnUseCase() } returns Result.Success(true)
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.disconnect()
-            testDispatcher.scheduler.advanceUntilIdle()
-            
+            testDispatcher.scheduler.runCurrent()
+
             // Then
             val loadingState = awaitItem()
             assertTrue(loadingState.isLoading)
-            
+
             val disconnectedState = awaitItem()
             assertFalse(disconnectedState.isConnected)
             assertFalse(disconnectedState.isLoading)
         }
     }
-    
+
     @Test
-    fun `connect should do nothing when already connected`() = runTest {
+    fun `connect should do nothing when already connected`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         coEvery { connectVpnUseCase() } returns Result.Success(true)
-        
+
         // Connect first
         viewModel.connect()
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        testDispatcher.scheduler.runCurrent()
+
         // When - Try to connect again
         viewModel.connect()
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        testDispatcher.scheduler.runCurrent()
+
         // Then - Should only call once
         coVerify(exactly = 1) {
             connectVpnUseCase()
         }
     }
-    
+
     @Test
-    fun `disconnect should do nothing when already disconnected`() = runTest {
+    fun `disconnect should do nothing when already disconnected`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         // When - Try to disconnect when not connected
         viewModel.disconnect()
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        testDispatcher.scheduler.runCurrent()
+
         // Then
         coVerify(exactly = 0) {
             disconnectVpnUseCase()
         }
     }
-    
+
     @Test
-    fun `should not connect or disconnect while loading`() = runTest {
+    fun `should not connect or disconnect while loading`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
-        
-        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, mockk(relaxed = true), preferencesManager, context)
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+
+        viewModel = newViewModel()
+        testDispatcher.scheduler.runCurrent()
+
         coEvery { connectVpnUseCase() } coAnswers {
             kotlinx.coroutines.delay(1000)
             Result.Success(true)
         }
-        
-        // When - Try multiple connects rapidly
+
+        // When - first connect() launches and suspends mid-flight (isLoading becomes
+        // true once its coroutine actually runs). Only after that state update has
+        // been applied does the guard in connect() have anything to see, so the first
+        // call needs its own pump before the "while loading" calls that follow -
+        // StandardTestDispatcher never runs launched work eagerly the way the real
+        // Dispatchers.Main.immediate does on Android's main thread.
+        viewModel.connect()
+        testDispatcher.scheduler.runCurrent()
+
         viewModel.connect()
         viewModel.connect()
-        viewModel.connect()
-        
-        testDispatcher.scheduler.advanceUntilIdle()
-        
+        testDispatcher.scheduler.runCurrent()
+
         // Then - Should only call once
         coVerify(exactly = 1) {
             connectVpnUseCase()

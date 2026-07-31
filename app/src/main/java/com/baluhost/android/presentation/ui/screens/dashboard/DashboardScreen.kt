@@ -45,6 +45,7 @@ import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.NotificationBell
 import com.baluhost.android.presentation.ui.components.VpnStatusBanner
 import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.model.DesktopState
 import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.presentation.ui.screens.vpn.VpnViewModel
@@ -88,6 +89,8 @@ fun DashboardScreen(
     val powerActionInProgress by viewModel.powerActionInProgress.collectAsState()
     val nasStatus by viewModel.nasStatus.collectAsState()
     val wolAvailability by viewModel.wolAvailability.collectAsState()
+    val desktopState by viewModel.desktopState.collectAsState()
+    val gamingModeAvailable by viewModel.gamingModeAvailable.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -258,10 +261,16 @@ fun DashboardScreen(
                         powerPermissions = powerPermissions,
                         isActionInProgress = powerActionInProgress,
                         wolAvailability = wolAvailability,
+                        desktopState = desktopState,
+                        gamingModeAvailable = gamingModeAvailable,
+                        onPowerDialogOpened = { viewModel.onPowerDialogOpened() },
                         onSendWol = { viewModel.sendWol() },
                         onSendWake = { viewModel.sendWake() },
                         onSendSoftSleep = { viewModel.sendSoftSleep() },
                         onSendSuspend = { viewModel.sendSuspend() },
+                        onEnableDesktop = { viewModel.enableDesktop() },
+                        onDisableDesktop = { viewModel.disableDesktop() },
+                        onStartGamingMode = { viewModel.startGamingMode() },
                         onNavigateToFritzBoxSettings = onNavigateToFritzBoxSettings
                     )
 
@@ -904,10 +913,16 @@ private fun ServerStatusStrip(
     powerPermissions: PowerPermissions,
     isActionInProgress: Boolean,
     wolAvailability: WolAvailability,
+    desktopState: DesktopState,
+    gamingModeAvailable: Boolean,
+    onPowerDialogOpened: () -> Unit,
     onSendWol: () -> Unit,
     onSendWake: () -> Unit,
     onSendSoftSleep: () -> Unit,
     onSendSuspend: () -> Unit,
+    onEnableDesktop: () -> Unit,
+    onDisableDesktop: () -> Unit,
+    onStartGamingMode: () -> Unit,
     onNavigateToFritzBoxSettings: () -> Unit
 ) {
     var showPowerDialog by remember { mutableStateOf(false) }
@@ -962,7 +977,10 @@ private fun ServerStatusStrip(
             }
             if (isAdmin || powerPermissions.hasAnyPermission) {
                 IconButton(
-                    onClick = { showPowerDialog = true },
+                    onClick = {
+                        showPowerDialog = true
+                        onPowerDialogOpened()
+                    },
                     modifier = Modifier.size(32.dp),
                     enabled = !isActionInProgress
                 ) {
@@ -1052,6 +1070,63 @@ private fun ServerStatusStrip(
                                     onClick = {
                                         showPowerDialog = false
                                         confirmAction = PowerAction.SUSPEND
+                                    }
+                                )
+                            }
+                            // One slot, two faces — mirrors the webapp, which shows
+                            // exactly one of the two depending on the status. On
+                            // UNKNOWN nothing is offered: guessing wrong would send
+                            // the opposite of what the user wanted. No confirmation
+                            // dialog either; both are harmless and instantly undone.
+                            if (isAdmin || powerPermissions.canToggleDesktop) {
+                                when (desktopState) {
+                                    DesktopState.RUNNING -> PowerOptionButton(
+                                        icon = Icons.Default.DesktopAccessDisabled,
+                                        label = "Display deaktivieren",
+                                        description = "Displays ausschalten, spart GPU-Strom",
+                                        color = Sky400,
+                                        onClick = {
+                                            showPowerDialog = false
+                                            onDisableDesktop()
+                                        }
+                                    )
+                                    DesktopState.STOPPED -> PowerOptionButton(
+                                        icon = Icons.Default.DesktopWindows,
+                                        label = "Display aktivieren",
+                                        description = "Displays wieder einschalten",
+                                        color = Green500,
+                                        onClick = {
+                                            showPowerDialog = false
+                                            onEnableDesktop()
+                                        }
+                                    )
+                                    DesktopState.UNKNOWN -> {}
+                                }
+                            }
+                            // Gated on gamingModeAvailable alone — the ViewModel
+                            // is the single authority for "may be shown" and
+                            // already folds the admin check into that value (see
+                            // onPowerDialogOpened()). Unlike the desktop toggle
+                            // above, there is no delegable permission to check
+                            // here: plugin menu actions have no per-user grant
+                            // on the server, the route is hard admin-only. The
+                            // desktop toggle instead has a real delegable
+                            // `can_toggle_desktop` permission, hence the `||`
+                            // there versus this single flag here. Gaming-mode
+                            // availability additionally comes from
+                            // `plugins/ui/manifest`, refetched on every dialog
+                            // open, because the plugin can be switched off
+                            // server-side. See
+                            // docs/superpowers/specs/2026-07-31-app-desktop-toggle-gaming-mode-design.md.
+                            if (gamingModeAvailable) {
+                                PowerOptionButton(
+                                    icon = Icons.Default.SportsEsports,
+                                    label = "Gaming-Modus",
+                                    description = "Displays an + Big Picture",
+                                    color = Violet500,
+                                    onClick = {
+                                        showPowerDialog = false
+                                        onStartGamingMode()
                                     }
                                 )
                             }

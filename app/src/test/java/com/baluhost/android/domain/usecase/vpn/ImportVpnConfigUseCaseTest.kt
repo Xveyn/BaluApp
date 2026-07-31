@@ -2,6 +2,7 @@ package com.baluhost.android.domain.usecase.vpn
 
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.model.VpnConfig
+import com.baluhost.android.util.Base64Decoder
 import com.baluhost.android.util.Result
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -19,7 +20,15 @@ class ImportVpnConfigUseCaseTest {
     @Before
     fun setup() {
         preferencesManager = mockk(relaxed = true)
-        importVpnConfigUseCase = ImportVpnConfigUseCase(preferencesManager)
+        // The production decoder calls android.util.Base64, which is stubbed to
+        // null in JVM unit tests. java.util.Base64 is the real thing and throws
+        // IllegalArgumentException on malformed input, exactly like the Android
+        // one — so the "invalid base64" test keeps its meaning.
+        val base64Decoder = object : Base64Decoder {
+            override fun decode(input: String): ByteArray =
+                java.util.Base64.getDecoder().decode(input)
+        }
+        importVpnConfigUseCase = ImportVpnConfigUseCase(preferencesManager, base64Decoder)
     }
     
     @After

@@ -82,7 +82,8 @@ class DeleteFileUseCaseTest {
         // Then
         assertTrue(result is Result.Error)
         val errorResult = result as Result.Error
-        assertEquals(errorMessage, errorResult.exception.message)
+        // DeleteFileUseCase wraps the cause: "Delete failed: <original>".
+        assertEquals("Delete failed: $errorMessage", errorResult.exception.message)
     }
     
     @Test

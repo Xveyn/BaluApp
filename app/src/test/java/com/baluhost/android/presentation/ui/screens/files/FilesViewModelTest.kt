@@ -49,6 +49,18 @@ class FilesViewModelTest {
         offlineQueueManager = mockk(relaxed = true)
         networkStateManager = mockk(relaxed = true)
 
+        // FilesViewModel.init calls .first() on these two (FilesViewModel.kt:190-191).
+        // A relaxed mock answers a Flow-returning call with an EMPTY flow, and
+        // .first() on an empty flow throws NoSuchElementException before the test
+        // body ever runs. Same reason DashboardViewModelVpnActionTest stubs its
+        // PreferencesManager flows explicitly.
+        every { preferencesManager.getDeviceId() } returns flowOf("device1")
+        every { preferencesManager.getAccessToken() } returns flowOf("token")
+        // Collected rather than .first()-ed, so an empty flow would not throw —
+        // stubbed anyway so the ViewModel sees a realistic state.
+        every { preferencesManager.getServerUrl() } returns flowOf("http://192.168.1.100:3000")
+        every { preferencesManager.getVpnConfig() } returns flowOf(null)
+
         // Default mock for initial load
         coEvery { getFilesUseCase(any(), any()) } returns Result.Success(emptyList())
 
@@ -114,24 +126,30 @@ class FilesViewModelTest {
         val files = listOf(
             FileItem("file1.txt", "documents/file1.txt", 1024, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
-        
+
         coEvery { getFilesUseCase("documents") } returns Result.Success(files)
-        
+
+        // Let init's own root loadFiles("") settle before opening the Turbine block
+        // (mirrors `navigateToFolder should update path and load files` below), so the
+        // only loading transition left to observe is the one this test triggers itself
+        // rather than a loading state from that concurrent root load.
+        testDispatcher.scheduler.advanceUntilIdle()
+
         // When
         viewModel.uiState.test {
-            skipItems(1) // Initial state
-            
+            skipItems(1) // Settled initial state
+
             viewModel.loadFiles("documents")
             testDispatcher.scheduler.advanceUntilIdle()
-            
+
             // Then
             val loadingState = awaitItem()
             assertTrue(loadingState.isLoading)
-            
-            val successState = awaitItem()
-            assertEquals(1, successState.files.size)
-            assertEquals("documents", successState.currentPath)
-            assertFalse(successState.isLoading)
+
+            val state = awaitItem()
+            assertEquals(1, state.files.size)
+            assertEquals("documents", state.currentPath)
+            assertFalse(state.isLoading)
         }
     }
     
@@ -221,26 +239,35 @@ class FilesViewModelTest {
         } returns Result.Success(refreshedFiles[0])
 
         coEvery { getFilesUseCase("", false) } returns Result.Success(refreshedFiles)
-        
+
+        // uploadFile() only reaches uploadFileUseCase when the ViewModel considers
+        // itself online; the mock defaults to offline (relaxed Boolean = false),
+        // which silently routes the call into the offline-queue branch instead of
+        // the success path this test exercises.
+        every { networkMonitor.isCurrentlyOnline() } returns true
+
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.uploadFile(file)
             testDispatcher.scheduler.advanceUntilIdle()
-            
+
             // Then
             val uploadingState = awaitItem()
             assertTrue(uploadingState.isUploading)
-            
+
             val completedState = awaitItem()
             assertFalse(completedState.isUploading)
-            
-            // Should refresh files
-            skipItems(1) // Loading state
-            val refreshedState = awaitItem()
+
+            // Should refresh files - drain any number of loading transitions
+            // instead of assuming there is exactly one.
+            var refreshedState = awaitItem()
+            while (refreshedState.isLoading) {
+                refreshedState = awaitItem()
+            }
             assertEquals(1, refreshedState.files.size)
         }
     }
@@ -260,19 +287,30 @@ class FilesViewModelTest {
         
         viewModel.loadFiles("documents")
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // When
         coEvery { getFilesUseCase("documents") } returns Result.Success(emptyList())
-        
+
+        // deleteFile() only reaches deleteFileUseCase when the ViewModel considers
+        // itself online; the mock defaults to offline (relaxed Boolean = false),
+        // which silently routes the call into the offline-queue branch instead of
+        // the success path this test exercises - the ViewModel never emits a
+        // second (loading) state in that branch, which is why the old fixed
+        // skipItems(1) here waited for an emission that never arrived.
+        every { networkMonitor.isCurrentlyOnline() } returns true
+
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.deleteFile(filePath)
             testDispatcher.scheduler.advanceUntilIdle()
-            
-            // Then - Should refresh and show empty list
-            skipItems(1) // Loading state
-            val state = awaitItem()
+
+            // Then - Should refresh and show empty list. Drain any number of
+            // loading transitions instead of assuming there is exactly one.
+            var state = awaitItem()
+            while (state.isLoading) {
+                state = awaitItem()
+            }
             assertTrue(state.files.isEmpty())
         }
     }
@@ -283,22 +321,55 @@ class FilesViewModelTest {
         val errorMessage = "Network error"
         
         coEvery { getFilesUseCase("documents") } returns Result.Error(Exception(errorMessage))
-        
+
+        // loadFiles()'s error branch picks a network/server-specific message when offline
+        // or the server is unreachable, and only falls through to the exception's own
+        // message in the else branch (FilesViewModel.kt:242-252). Both mocks default to
+        // offline/unreachable (relaxed = true), which would silently route this into one
+        // of those other branches instead of the else branch this test exercises.
+        every { networkMonitor.isCurrentlyOnline() } returns true
+        every { serverConnectivityChecker.isCurrentlyReachable() } returns true
+
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.loadFiles("documents")
             testDispatcher.scheduler.advanceUntilIdle()
-            
+
             // Then
             skipItems(1) // Loading state
-            
+
             val errorState = awaitItem()
             assertFalse(errorState.isLoading)
             assertEquals(errorMessage, errorState.error)
+        }
+    }
+
+    @Test
+    fun `loadFiles should show offline message when offline with no cache`() = runTest {
+        // Given - networkMonitor defaults to offline (relaxed mock) and there is no
+        // cached file list yet, so loadFiles()'s error branch reports the offline-specific
+        // wording rather than the exception's own message (FilesViewModel.kt:242-252).
+        coEvery { getFilesUseCase("documents") } returns Result.Error(Exception("Network error"))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // When
+        viewModel.uiState.test {
+            skipItems(1)
+
+            viewModel.loadFiles("documents")
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // Then
+            skipItems(1) // Loading state
+
+            val errorState = awaitItem()
+            assertFalse(errorState.isLoading)
+            assertEquals("Keine Verbindung zum Server", errorState.error)
         }
     }
     
