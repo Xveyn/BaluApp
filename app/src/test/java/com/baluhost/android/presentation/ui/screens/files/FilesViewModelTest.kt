@@ -126,24 +126,28 @@ class FilesViewModelTest {
         val files = listOf(
             FileItem("file1.txt", "documents/file1.txt", 1024, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
-        
+
         coEvery { getFilesUseCase("documents") } returns Result.Success(files)
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1) // Initial state
-            
+
             viewModel.loadFiles("documents")
             testDispatcher.scheduler.advanceUntilIdle()
-            
-            // Then
-            val loadingState = awaitItem()
-            assertTrue(loadingState.isLoading)
-            
-            val successState = awaitItem()
-            assertEquals(1, successState.files.size)
-            assertEquals("documents", successState.currentPath)
-            assertFalse(successState.isLoading)
+
+            // Then - ViewModel.init kicks off its own root loadFiles("") concurrently
+            // with the explicit call above, so an unpredictable number of loading /
+            // settled states for path "" can arrive first. Drain until we reach the
+            // settled state for the path this test actually triggered, rather than
+            // assuming a fixed number of emissions.
+            var state = awaitItem()
+            while (state.isLoading || state.currentPath != "documents") {
+                state = awaitItem()
+            }
+            assertEquals(1, state.files.size)
+            assertEquals("documents", state.currentPath)
+            assertFalse(state.isLoading)
         }
     }
     
@@ -233,26 +237,35 @@ class FilesViewModelTest {
         } returns Result.Success(refreshedFiles[0])
 
         coEvery { getFilesUseCase("", false) } returns Result.Success(refreshedFiles)
-        
+
+        // uploadFile() only reaches uploadFileUseCase when the ViewModel considers
+        // itself online; the mock defaults to offline (relaxed Boolean = false),
+        // which silently routes the call into the offline-queue branch instead of
+        // the success path this test exercises.
+        every { networkMonitor.isCurrentlyOnline() } returns true
+
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.uploadFile(file)
             testDispatcher.scheduler.advanceUntilIdle()
-            
+
             // Then
             val uploadingState = awaitItem()
             assertTrue(uploadingState.isUploading)
-            
+
             val completedState = awaitItem()
             assertFalse(completedState.isUploading)
-            
-            // Should refresh files
-            skipItems(1) // Loading state
-            val refreshedState = awaitItem()
+
+            // Should refresh files - drain any number of loading transitions
+            // instead of assuming there is exactly one.
+            var refreshedState = awaitItem()
+            while (refreshedState.isLoading) {
+                refreshedState = awaitItem()
+            }
             assertEquals(1, refreshedState.files.size)
         }
     }
@@ -272,19 +285,30 @@ class FilesViewModelTest {
         
         viewModel.loadFiles("documents")
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // When
         coEvery { getFilesUseCase("documents") } returns Result.Success(emptyList())
-        
+
+        // deleteFile() only reaches deleteFileUseCase when the ViewModel considers
+        // itself online; the mock defaults to offline (relaxed Boolean = false),
+        // which silently routes the call into the offline-queue branch instead of
+        // the success path this test exercises - the ViewModel never emits a
+        // second (loading) state in that branch, which is why the old fixed
+        // skipItems(1) here waited for an emission that never arrived.
+        every { networkMonitor.isCurrentlyOnline() } returns true
+
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.deleteFile(filePath)
             testDispatcher.scheduler.advanceUntilIdle()
-            
-            // Then - Should refresh and show empty list
-            skipItems(1) // Loading state
-            val state = awaitItem()
+
+            // Then - Should refresh and show empty list. Drain any number of
+            // loading transitions instead of assuming there is exactly one.
+            var state = awaitItem()
+            while (state.isLoading) {
+                state = awaitItem()
+            }
             assertTrue(state.files.isEmpty())
         }
     }
