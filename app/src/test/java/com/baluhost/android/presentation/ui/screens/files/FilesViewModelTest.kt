@@ -49,6 +49,18 @@ class FilesViewModelTest {
         offlineQueueManager = mockk(relaxed = true)
         networkStateManager = mockk(relaxed = true)
 
+        // FilesViewModel.init calls .first() on these two (FilesViewModel.kt:190-191).
+        // A relaxed mock answers a Flow-returning call with an EMPTY flow, and
+        // .first() on an empty flow throws NoSuchElementException before the test
+        // body ever runs. Same reason DashboardViewModelVpnActionTest stubs its
+        // PreferencesManager flows explicitly.
+        every { preferencesManager.getDeviceId() } returns flowOf("device1")
+        every { preferencesManager.getAccessToken() } returns flowOf("token")
+        // Collected rather than .first()-ed, so an empty flow would not throw —
+        // stubbed anyway so the ViewModel sees a realistic state.
+        every { preferencesManager.getServerUrl() } returns flowOf("http://192.168.1.100:3000")
+        every { preferencesManager.getVpnConfig() } returns flowOf(null)
+
         // Default mock for initial load
         coEvery { getFilesUseCase(any(), any()) } returns Result.Success(emptyList())
 
