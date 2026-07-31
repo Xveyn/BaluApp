@@ -7,6 +7,7 @@ import com.baluhost.android.domain.repository.SleepConfigRepository
 import com.baluhost.android.util.Result
 import com.google.gson.JsonNull
 import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
@@ -35,7 +36,7 @@ class SleepConfigRepositoryImpl @Inject constructor(
         } catch (e: HttpException) {
             val message =
                 if (e.code() == 403) "Nur Admins dürfen das ändern"
-                else "Always-Awake fehlgeschlagen: ${e.message()}"
+                else "Always-Awake fehlgeschlagen: ${e.readableMessage()}"
             Result.Error(Exception(message, e))
         } catch (e: DateTimeParseException) {
             // A timestamp we cannot read is a broken contract, not a permanent
@@ -45,6 +46,28 @@ class SleepConfigRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             Result.Error(Exception("Server nicht erreichbar", e))
         }
+    }
+
+    /**
+     * `HttpException.message()` is only the HTTP reason phrase — not the response
+     * body — and OkHttp reports an empty string for it on HTTP/2. The response
+     * body is where the server's actual explanation lives (e.g. a 422's `detail`
+     * naming exactly which validation failed), so read that first and only fall
+     * back to the reason phrase if the body is empty or fails to read.
+     */
+    private fun HttpException.readableMessage(): String {
+        val body = try {
+            response()?.errorBody()?.string()
+        } catch (_: Exception) {
+            null
+        }
+        if (body.isNullOrBlank()) return message()
+        val detail = try {
+            JsonParser.parseString(body).asJsonObject.get("detail")?.takeIf { !it.isJsonNull }?.asString
+        } catch (_: Exception) {
+            null
+        }
+        return detail ?: body
     }
 
     /**

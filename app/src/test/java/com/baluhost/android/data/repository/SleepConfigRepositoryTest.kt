@@ -51,6 +51,10 @@ class SleepConfigRepositoryTest {
         Response.error<Any>(code, "".toResponseBody("application/json".toMediaTypeOrNull()))
     )
 
+    private fun httpErrorWithBody(code: Int, body: String) = HttpException(
+        Response.error<Any>(code, body.toResponseBody("application/json".toMediaTypeOrNull()))
+    )
+
     private fun captureBody(): CapturingSlot<RequestBody> {
         val slot = slot<RequestBody>()
         coEvery { sleepApi.updateSleepConfig(capture(slot)) } returns SleepConfigDto()
@@ -147,6 +151,21 @@ class SleepConfigRepositoryTest {
         val result = repository.getAlwaysAwake()
 
         assertEquals("Nur Admins dürfen das ändern", (result as Result.Error).exception.message)
+    }
+
+    @Test
+    fun `a 422 surfaces the server's detail message, not the empty reason phrase`() = runTest {
+        // HttpException#message() is the HTTP reason phrase, which OkHttp reports
+        // as empty on HTTP/2 — the real explanation lives in the response body.
+        coEvery { sleepApi.updateSleepConfig(any()) } throws
+            httpErrorWithBody(422, """{"detail":"until must be within 7 days"}""")
+
+        val result = repository.setAlwaysAwake(enabled = true, until = Instant.parse("2026-08-01T21:30:00Z"))
+
+        assertEquals(
+            "Always-Awake fehlgeschlagen: until must be within 7 days",
+            (result as Result.Error).exception.message
+        )
     }
 
     @Test
