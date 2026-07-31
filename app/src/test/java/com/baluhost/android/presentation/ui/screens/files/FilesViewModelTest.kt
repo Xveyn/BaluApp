@@ -140,11 +140,17 @@ class FilesViewModelTest {
             // with the explicit call above, so an unpredictable number of loading /
             // settled states for path "" can arrive first. Drain until we reach the
             // settled state for the path this test actually triggered, rather than
-            // assuming a fixed number of emissions.
+            // assuming a fixed number of emissions. Track whether a loading state
+            // was observed along the way so we still prove the load goes through a
+            // loading phase - a ViewModel that stopped reporting progress entirely
+            // would otherwise still pass.
+            var sawLoading = false
             var state = awaitItem()
             while (state.isLoading || state.currentPath != "documents") {
+                if (state.isLoading) sawLoading = true
                 state = awaitItem()
             }
+            assertTrue(sawLoading)
             assertEquals(1, state.files.size)
             assertEquals("documents", state.currentPath)
             assertFalse(state.isLoading)
