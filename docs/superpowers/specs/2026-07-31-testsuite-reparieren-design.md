@@ -69,6 +69,23 @@ als gesetzt anzunehmen. Zweite Hypothese, die mitgeprüft gehört: `forkEvery`, 
 die Test-Klassen auf mehrere JVMs verteilt und damit die Akkumulation gar nicht
 erst entstehen lässt.
 
+> **Korrektur (nach Abschluss der Reparatur, Task 8):** Die obige Diagnose
+> "MockKs Reflection-Pfad akkumuliert Kotlin-Metadaten über den Lauf hinweg"
+> ist **widerlegt**. Die tatsächliche Ursache war `VpnViewModelTest`: weil
+> `Dispatchers.setMain(testDispatcher)` in `@Before` läuft, übernimmt `runTest{}`
+> denselben `TestCoroutineScheduler` wie `VpnViewModel`s unbegrenzte
+> `while (isActive) { …; delay(3000) }`-Polling-Schleife aus `init{}`. Der
+> "advance to idle"-Schritt, den `runTest{}` am Ende jedes Testkörpers ausführt,
+> terminiert dadurch nie und häuft unbegrenzt Allokationen an, bis der Heap
+> ausgeht — unabhängig von der konfigurierten Heap-Größe. Der
+> `kotlin.reflect...ProtoBuf`-Frame im Stacktrace war nur die zufällig gerade
+> laufende Allokation im Moment des OOM, nicht die Ursache. Der Fix (Task 8)
+> kapselt jede in `VpnViewModelTest` konstruierte ViewModel-Instanz in einem
+> `ViewModelStore` und ruft `clear()` **innerhalb** des Testkörpers auf, bevor
+> `runTest{}` seinen finalen Advance ausführt — siehe
+> `app/src/test/java/com/baluhost/android/presentation/ui/screens/vpn/VpnViewModelTest.kt`.
+> Details: `.superpowers/sdd/2026-07-31-testsuite-reparieren/task-8-report.md`.
+
 ### B — Relaxed-Mocks liefern leere Flows (8–11 Tests)
 
 `FilesViewModelTest` (5×) scheitert mit
