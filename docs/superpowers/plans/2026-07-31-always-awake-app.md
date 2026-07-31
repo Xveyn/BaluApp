@@ -896,13 +896,13 @@ class AlwaysAwakeViewModel @Inject constructor(
 
 Run: `.\gradlew.bat testDebugUnitTest --console=plain --no-build-cache --tests "com.baluhost.android.presentation.ui.screens.settings.AlwaysAwakeViewModelTest"`
 
-Expected: BUILD SUCCESSFUL, 13 Tests grün.
+Expected: BUILD SUCCESSFUL, 12 Tests grün.
 
 - [ ] **Step 8: Full suite and build**
 
 Run: `.\gradlew.bat cleanTestDebugUnitTest testDebugUnitTest --console=plain --no-build-cache` plus XML-Zählung.
 
-Expected: `tests=168 failures=0 errors=0` (155 + deine 13).
+Expected: `tests=167 failures=0 errors=0` (155 + deine 12).
 
 Run: `.\gradlew.bat assembleDebug --console=plain`
 
@@ -1283,7 +1283,7 @@ Expected: BUILD SUCCESSFUL. Fehler hier sind fast immer ein fehlendes Komma im `
 
 Run: `.\gradlew.bat cleanTestDebugUnitTest testDebugUnitTest --console=plain --no-build-cache` plus XML-Zählung.
 
-Expected: `tests=168 failures=0 errors=0` — unverändert, diese Task fügt keine Tests hinzu.
+Expected: `tests=167 failures=0 errors=0` — unverändert, diese Task fügt keine Tests hinzu.
 
 - [ ] **Step 8: Manual check on a device**
 
@@ -1309,6 +1309,6 @@ git commit -m "feat(sleep): add the always-awake screen and its settings entry"
 
 ## Nach Abschluss
 
-Der Plan ist erledigt, wenn `.\gradlew.bat cleanTestDebugUnitTest testDebugUnitTest --no-build-cache` **168 Tests / 0 Fehler** meldet, `.\gradlew.bat assembleDebug` baut und die manuelle Prüfung aus Task 3 Step 8 bestanden ist.
+Der Plan ist erledigt, wenn `.\gradlew.bat cleanTestDebugUnitTest testDebugUnitTest --no-build-cache` **167 Tests / 0 Fehler** meldet, `.\gradlew.bat assembleDebug` baut und die manuelle Prüfung aus Task 3 Step 8 bestanden ist.
 
 Besonders die Punkte 4 und 8 der manuellen Liste sind nicht optional: Punkt 4 ist der einzige Beleg, dass der explizite `null`-Wert für „permanent" tatsächlich über die Leitung geht — alle Unit-Tests dazu prüfen den erzeugten JSON-String, nicht die Antwort des echten Servers. Punkt 8 ist der einzige Beleg für die Admin-Beschränkung an der Oberfläche.
