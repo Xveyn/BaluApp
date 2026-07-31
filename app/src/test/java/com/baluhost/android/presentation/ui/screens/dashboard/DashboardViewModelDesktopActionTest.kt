@@ -6,9 +6,12 @@ import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.notification.NotificationWebSocketManager
 import com.baluhost.android.domain.model.DesktopActionResult
 import com.baluhost.android.domain.model.DesktopState
+import com.baluhost.android.domain.model.NasStatus
+import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.domain.usecase.plugin.IsGamingModeAvailableUseCase
 import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
 import com.baluhost.android.domain.model.PowerPermissions
+import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
 import com.baluhost.android.domain.usecase.power.DisableDesktopUseCase
 import com.baluhost.android.domain.usecase.power.EnableDesktopUseCase
 import com.baluhost.android.domain.usecase.power.GetDesktopStatusUseCase
@@ -46,6 +49,7 @@ class DashboardViewModelDesktopActionTest {
     private lateinit var isGamingModeAvailableUseCase: IsGamingModeAvailableUseCase
     private lateinit var startGamingModeUseCase: StartGamingModeUseCase
     private lateinit var getMyPowerPermissionsUseCase: GetMyPowerPermissionsUseCase
+    private lateinit var checkNasStatusUseCase: CheckNasStatusUseCase
 
     @Before
     fun setup() {
@@ -58,6 +62,7 @@ class DashboardViewModelDesktopActionTest {
         isGamingModeAvailableUseCase = mockk()
         startGamingModeUseCase = mockk()
         getMyPowerPermissionsUseCase = mockk()
+        checkNasStatusUseCase = mockk()
 
         every { preferencesManager.getServerUrl() } returns flowOf("http://192.168.1.100:3000")
         every { preferencesManager.getUsername() } returns flowOf("testuser")
@@ -72,6 +77,14 @@ class DashboardViewModelDesktopActionTest {
         // loadPowerPermissions() runs in the ViewModel's init block, so every
         // stub it depends on has to be in place before createViewModel().
         coEvery { getMyPowerPermissionsUseCase() } returns Result.Success(PowerPermissions())
+        // onPowerDialogOpened() (Fix 6) short-circuits unless nasStatus is
+        // ONLINE. loadDashboardData() drives that during init via
+        // updateNasStatus(); telemetry is not stubbed here (each test can
+        // override it), so the fallback path through checkNasStatusUseCase()
+        // is what actually sets it — resolve it to ONLINE so the desktop
+        // dialog tests in this file keep working the way they did before
+        // onPowerDialogOpened() started checking nasStatus.
+        coEvery { checkNasStatusUseCase() } returns NasStatusResult.Resolved(NasStatus.ONLINE)
     }
 
     @After
@@ -102,7 +115,7 @@ class DashboardViewModelDesktopActionTest {
             sendWolUseCase = mockk(relaxed = true),
             sendSoftSleepUseCase = mockk(relaxed = true),
             sendSuspendUseCase = mockk(relaxed = true),
-            checkNasStatusUseCase = mockk(relaxed = true),
+            checkNasStatusUseCase = checkNasStatusUseCase,
             getMyPowerPermissionsUseCase = getMyPowerPermissionsUseCase,
             sendWakeUseCase = mockk(relaxed = true),
             getDesktopStatusUseCase = getDesktopStatusUseCase,
@@ -155,6 +168,22 @@ class DashboardViewModelDesktopActionTest {
             // A discovery call must stay silent — the entry just does not appear.
             expectNoEvents()
         }
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `onPowerDialogOpened skips the desktop status call when the server is not online`() = runTest {
+        // The ONLINE branch of the power dialog is the only one that renders
+        // desktop/gaming entries; against OFFLINE or SLEEPING the status call
+        // could only time out, so it should not even be attempted.
+        coEvery { checkNasStatusUseCase() } returns NasStatusResult.FritzBoxUnreachable
+        val vm = createViewModel()
+        assertEquals(NasStatus.OFFLINE, vm.nasStatus.value)
+
+        vm.onPowerDialogOpened()
+
+        coVerify(exactly = 0) { getDesktopStatusUseCase() }
+        coVerify(exactly = 0) { isGamingModeAvailableUseCase() }
         clearViewModel(vm)
     }
 
@@ -234,16 +263,41 @@ class DashboardViewModelDesktopActionTest {
     }
 
     @Test
-    fun `enableDesktop reports a failure and leaves the state alone`() = runTest {
-        coEvery { enableDesktopUseCase() } returns Result.Error(Exception("Displays einschalten fehlgeschlagen: 403"))
+    fun `enableDesktop reports a failure and resets the state to UNKNOWN`() = runTest {
+        // Seed a known, non-UNKNOWN state first — the same way
+        // `a failing desktop status resets the state to UNKNOWN` does — so the
+        // later assertion actually proves the action moved the state, rather
+        // than merely matching the initial UNKNOWN default.
+        coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.STOPPED)
         val vm = createViewModel()
+        vm.onPowerDialogOpened()
+        assertEquals(DesktopState.STOPPED, vm.desktopState.value)
+
+        coEvery { enableDesktopUseCase() } returns Result.Error(Exception("Displays einschalten fehlgeschlagen: 403"))
 
         vm.snackbarEvent.test {
             vm.enableDesktop()
 
             assertEquals("Displays einschalten fehlgeschlagen: 403", awaitItem())
         }
+        // A failed action means the app no longer knows the truth: UNKNOWN
+        // hides the entry until the next refresh resolves it.
         assertEquals(DesktopState.UNKNOWN, vm.desktopState.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `enableDesktop with sessionUnlocked null reports plain success`() = runTest {
+        coEvery { enableDesktopUseCase() } returns
+            Result.Success(DesktopActionResult("displays on", sessionUnlocked = null))
+        val vm = createViewModel()
+
+        vm.snackbarEvent.test {
+            vm.enableDesktop()
+
+            assertEquals("Displays aktiviert", awaitItem())
+        }
+        assertEquals(DesktopState.RUNNING, vm.desktopState.value)
         clearViewModel(vm)
     }
 
@@ -258,6 +312,25 @@ class DashboardViewModelDesktopActionTest {
             assertEquals("Displays deaktiviert", awaitItem())
         }
         assertEquals(DesktopState.STOPPED, vm.desktopState.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `disableDesktop reports a failure and resets the state to UNKNOWN`() = runTest {
+        // Same seed-then-fail model as the enableDesktop failure test above.
+        coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.RUNNING)
+        val vm = createViewModel()
+        vm.onPowerDialogOpened()
+        assertEquals(DesktopState.RUNNING, vm.desktopState.value)
+
+        coEvery { disableDesktopUseCase() } returns Result.Error(Exception("Displays ausschalten fehlgeschlagen: 403"))
+
+        vm.snackbarEvent.test {
+            vm.disableDesktop()
+
+            assertEquals("Displays ausschalten fehlgeschlagen: 403", awaitItem())
+        }
+        assertEquals(DesktopState.UNKNOWN, vm.desktopState.value)
         clearViewModel(vm)
     }
 
@@ -277,16 +350,26 @@ class DashboardViewModelDesktopActionTest {
     }
 
     @Test
-    fun `startGamingMode reports the plugin's own failure`() = runTest {
+    fun `startGamingMode reports the plugin's own failure and resets the state to UNKNOWN`() = runTest {
+        // The documented partial failure means displays are actually on even
+        // though the call errored — a stale STOPPED here would tell the user
+        // the opposite of reality. Seed STOPPED first, the same seed-then-fail
+        // model as the enableDesktop/disableDesktop failure tests, so the
+        // assertion proves the transition instead of matching the default.
+        coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.STOPPED)
+        val vm = createViewModel()
+        vm.onPowerDialogOpened()
+        assertEquals(DesktopState.STOPPED, vm.desktopState.value)
+
         coEvery { startGamingModeUseCase() } returns
             Result.Error(Exception("Displays sind an, aber Steam startete nicht"))
-        val vm = createViewModel()
 
         vm.snackbarEvent.test {
             vm.startGamingMode()
 
             assertEquals("Displays sind an, aber Steam startete nicht", awaitItem())
         }
+        assertEquals(DesktopState.UNKNOWN, vm.desktopState.value)
         clearViewModel(vm)
     }
 }
