@@ -22,6 +22,7 @@ import com.baluhost.android.presentation.ui.screens.storage.StorageOverviewScree
 import com.baluhost.android.presentation.ui.screens.shares.SharesScreen
 import com.baluhost.android.presentation.ui.screens.notifications.NotificationsScreen
 import com.baluhost.android.presentation.ui.screens.notifications.NotificationPreferencesScreen
+import com.baluhost.android.presentation.ui.screens.settings.AlwaysAwakeScreen
 import com.baluhost.android.presentation.ui.screens.settings.FritzBoxSettingsScreen
 import com.baluhost.android.presentation.ui.screens.sync.FolderSyncScreen
 import com.baluhost.android.presentation.ui.screens.sync.SyncScheduleScreen
@@ -253,6 +254,14 @@ fun NavGraph(
 
         composable(Screen.FritzBoxSettings.route) {
             FritzBoxSettingsScreen(
+                onNavigateBack = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
+        composable(Screen.AlwaysAwake.route) {
+            AlwaysAwakeScreen(
                 onNavigateBack = {
                     navController.popBackStack()
                 }

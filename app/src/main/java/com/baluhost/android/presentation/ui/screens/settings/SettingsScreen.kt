@@ -46,6 +46,7 @@ fun SettingsScreen(
     onNavigateToSplash: () -> Unit,
     onNavigateToNotificationPreferences: () -> Unit = {},
     onNavigateToFritzBox: () -> Unit = {},
+    onNavigateToAlwaysAwake: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
     vpnViewModel: VpnViewModel = hiltViewModel()
 ) {
@@ -373,6 +374,46 @@ fun SettingsScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
                                     text = "Wake-on-LAN Konfiguration",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Slate400
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "Öffnen",
+                                tint = Sky400
+                            )
+                        }
+                    }
+                }
+
+                // ── Section: Server ──
+                // Admin-only: the server's sleep-config routes are guarded by
+                // get_current_admin, with no delegatable permission.
+                if (isAdmin) {
+                    SectionHeader(text = "Server")
+
+                    GlassCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        intensity = GlassIntensity.Medium,
+                        onClick = onNavigateToAlwaysAwake
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "ALWAYS-AWAKE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Slate500,
+                                    letterSpacing = 2.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Server wach halten, befristet oder dauerhaft",
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Slate400
                                 )

@@ -151,6 +151,9 @@ fun MainScreen(
                         },
                         onNavigateToFritzBox = {
                             parentNavController.navigate(Screen.FritzBoxSettings.route)
+                        },
+                        onNavigateToAlwaysAwake = {
+                            parentNavController.navigate(Screen.AlwaysAwake.route)
                         }
                     )
                 }

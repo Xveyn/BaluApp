@@ -37,4 +37,5 @@ sealed class Screen(val route: String) {
     object Notifications : Screen("notifications")
     object NotificationPreferences : Screen("notification_preferences")
     object FritzBoxSettings : Screen("fritzbox_settings")
+    object AlwaysAwake : Screen("always_awake")
 }
