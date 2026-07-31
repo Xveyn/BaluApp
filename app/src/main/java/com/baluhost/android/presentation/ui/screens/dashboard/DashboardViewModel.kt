@@ -446,7 +446,8 @@ class DashboardViewModel @Inject constructor(
                     if (_isAdmin.value) {
                         _powerPermissions.value = PowerPermissions(
                             canSoftSleep = true, canWake = true,
-                            canSuspend = true, canWol = true
+                            canSuspend = true, canWol = true,
+                            canToggleDesktop = true, canUnlockSession = true
                         )
                     }
                     Log.w("DashboardViewModel", "Failed to load power permissions", result.exception)

@@ -68,5 +68,9 @@ data class MyPowerPermissionsDto(
     @SerializedName("can_suspend")
     val canSuspend: Boolean = false,
     @SerializedName("can_wol")
-    val canWol: Boolean = false
+    val canWol: Boolean = false,
+    @SerializedName("can_toggle_desktop")
+    val canToggleDesktop: Boolean = false,
+    @SerializedName("can_unlock_session")
+    val canUnlockSession: Boolean = false
 )

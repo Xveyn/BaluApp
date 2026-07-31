@@ -79,7 +79,9 @@ class PowerRepositoryImpl @Inject constructor(
                 canSoftSleep = dto.canSoftSleep,
                 canWake = dto.canWake,
                 canSuspend = dto.canSuspend,
-                canWol = dto.canWol
+                canWol = dto.canWol,
+                canToggleDesktop = dto.canToggleDesktop,
+                canUnlockSession = dto.canUnlockSession
             ))
         } catch (e: HttpException) {
             Result.Error(Exception("Berechtigungen konnten nicht geladen werden: ${e.message()}", e))
