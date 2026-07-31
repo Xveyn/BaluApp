@@ -90,22 +90,23 @@ class GetFilesUseCaseTest {
     }
     
     @Test
-    fun `invoke should return error when repository call fails`() = runTest {
+    fun `invoke swallows repository failures and returns an empty list`() = runTest {
         // Given
         val path = "documents"
-        val errorMessage = "Failed to list files"
-        
+
         coEvery {
             fileRepository.getFiles(path, false)
-        } throws Exception(errorMessage)
-        
+        } throws Exception("Failed to list files")
+
         // When
         val result = getFilesUseCase(path)
-        
-        // Then
-        assertTrue(result is Result.Error)
-        val errorResult = result as Result.Error
-        assertEquals(errorMessage, errorResult.exception.message)
+
+        // Then — deliberate: a failure here must not become a Result.Error,
+        // because the Files screen would navigate to the QR scanner on one.
+        // The user learns about the outage from ServerConnectivityChecker
+        // instead. See the comment in GetFilesUseCase.
+        assertTrue(result is Result.Success)
+        assertTrue((result as Result.Success).data.isEmpty())
     }
     
     @Test

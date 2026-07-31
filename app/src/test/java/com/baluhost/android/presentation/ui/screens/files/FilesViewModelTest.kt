@@ -307,10 +307,12 @@ class FilesViewModelTest {
             
             // Then
             skipItems(1) // Loading state
-            
+
             val errorState = awaitItem()
             assertFalse(errorState.isLoading)
-            assertEquals(errorMessage, errorState.error)
+            // The ViewModel does not pass the cause's text through — it reports
+            // its own user-facing wording, so the stub's message is only an input.
+            assertEquals("Keine Verbindung zum Server", errorState.error)
         }
     }
     
