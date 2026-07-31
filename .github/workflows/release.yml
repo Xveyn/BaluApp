@@ -115,7 +115,12 @@ jobs:
 
       - name: Verify the APK carries the tag's version
         run: |
-          BADGING=$("$ANDROID_HOME"/build-tools/*/aapt2 dump badging app/build/outputs/apk/release/app-release.apk)
+          # ubuntu-latest preinstalls several build-tools versions, so the bare
+          # glob expands to multiple paths: the first becomes the command and
+          # the rest become stray leading arguments, breaking aapt2 on every
+          # run. Pick exactly one path deterministically, highest version last.
+          AAPT2=$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)
+          BADGING=$("$AAPT2" dump badging app/build/outputs/apk/release/app-release.apk)
           echo "$BADGING" | grep -q "versionName='${{ steps.version.outputs.name }}'" \
             || { echo "::error::APK versionName does not match ${{ steps.version.outputs.name }}"; exit 1; }
 
