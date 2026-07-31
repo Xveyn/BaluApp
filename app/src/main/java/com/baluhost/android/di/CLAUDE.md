@@ -23,7 +23,7 @@ Seven Hilt modules, all `@InstallIn(SingletonComponent::class)` — everything t
 | `DatabaseModule.kt` | `@Provides` (`object`) | DataStore, `PreferencesManager`, `SecureStorage`, `BaluHostDatabase` (Room), its DAOs (`FileDao`, `UserDao`, `PendingOperationDao`, `FileActivityDao`) |
 | `ImageLoaderModule.kt` | `@Provides` (`object`) | Coil `ImageLoader`, reusing `NetworkModule`'s `OkHttpClient` |
 | `NetworkModule.kt` | `@Provides` (`object`) | OkHttp interceptors, `OkHttpClient` (default + `@Named("websocket")`), `Retrofit`, all 13 `*Api` interfaces, `NetworkStateManager` |
-| `RepositoryModule.kt` | `@Binds` (`abstract class`) | Binds all 11 `domain/repository/*Repository` interfaces to their `data/repository/*RepositoryImpl` |
+| `RepositoryModule.kt` | `@Binds` (`abstract class`) | Binds all 12 `domain/repository/*Repository` interfaces to their `data/repository/*RepositoryImpl` |
 | `SyncModule.kt` | `@Provides` (`object`) | `ExternalStorageHelper`, `LocalStorageRepository`, `SAFStorageAdapter`, `WebDavAdapter`, `WebDavAdapterFactory`, `WebDavAccountManager`, `SmbAdapter` |
 | `WorkerModule.kt` | `@Provides` (`object`) | `WorkManager`, `LocalFolderScanner` |
 
