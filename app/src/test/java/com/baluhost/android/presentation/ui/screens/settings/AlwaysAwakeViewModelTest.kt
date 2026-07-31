@@ -164,13 +164,41 @@ class AlwaysAwakeViewModelTest {
     }
 
     @Test
-    fun `exactly seven days away is accepted`() = runTest {
+    fun `exactly seven days away is refused to leave headroom for clock skew`() = runTest {
+        // The client's ceiling sits five minutes inside the server's "> now + 7
+        // days" so that latency or clock skew cannot push an accepted value past
+        // the server's own check. A value at the literal seven-day mark must
+        // therefore be refused client-side rather than risk a 422.
         val vm = viewModel()
-        val target = now.plus(Duration.ofDays(7))
+
+        vm.snackbarEvent.test {
+            vm.setCustom(now.plus(Duration.ofDays(7)))
+
+            assertEquals("Höchstens 7 Tage im Voraus", awaitItem())
+        }
+        coVerify(exactly = 0) { setAlwaysAwake(any(), any()) }
+    }
+
+    @Test
+    fun `exactly the safety-margined boundary is accepted`() = runTest {
+        val vm = viewModel()
+        val target = now.plus(Duration.ofDays(7)).minus(Duration.ofMinutes(5))
 
         vm.setCustom(target)
 
         coVerify { setAlwaysAwake(true, target) }
+    }
+
+    @Test
+    fun `one second past the safety-margined boundary is refused`() = runTest {
+        val vm = viewModel()
+
+        vm.snackbarEvent.test {
+            vm.setCustom(now.plus(Duration.ofDays(7)).minus(Duration.ofMinutes(5)).plusSeconds(1))
+
+            assertEquals("Höchstens 7 Tage im Voraus", awaitItem())
+        }
+        coVerify(exactly = 0) { setAlwaysAwake(any(), any()) }
     }
 
     // ---- failure handling --------------------------------------------------

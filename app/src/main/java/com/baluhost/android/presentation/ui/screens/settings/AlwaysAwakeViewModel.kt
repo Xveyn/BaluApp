@@ -74,7 +74,12 @@ class AlwaysAwakeViewModel @Inject constructor(
         val message = when {
             !until.isAfter(now) -> "Der Zeitpunkt muss in der Zukunft liegen"
             until.isBefore(now.plus(MIN_HORIZON)) -> "Mindestens 5 Minuten in der Zukunft"
-            until.isAfter(now.plus(MAX_HORIZON)) -> "Höchstens 7 Tage im Voraus"
+            // The server re-checks "> now + 7 days" against its own clock when the
+            // request lands, not the device's clock at the moment of the tap.
+            // Shaving a safety margin off our own ceiling leaves headroom for
+            // clock skew and round-trip latency, so a value we accept here does
+            // not come back as a 422.
+            until.isAfter(now.plus(MAX_HORIZON).minus(HORIZON_SAFETY_MARGIN)) -> "Höchstens 7 Tage im Voraus"
             else -> null
         }
         if (message != null) {
@@ -90,6 +95,11 @@ class AlwaysAwakeViewModel @Inject constructor(
     fun disable() = save(enabled = false, until = null)
 
     private fun save(enabled: Boolean, until: Instant?) {
+        // Captured before launch, not inside it: overlapping saves are safe only
+        // because viewModelScope.launch dispatches on Dispatchers.Main.immediate,
+        // which runs synchronously up to the first suspension point. That means
+        // isSaving = true (below) is set — and the buttons disabled — before this
+        // function returns, so a second tap cannot race in with a stale `previous`.
         val previous = _uiState.value
         viewModelScope.launch {
             _uiState.value = previous.copy(isSaving = true)
@@ -113,5 +123,7 @@ class AlwaysAwakeViewModel @Inject constructor(
     private companion object {
         val MIN_HORIZON: Duration = Duration.ofMinutes(5)
         val MAX_HORIZON: Duration = Duration.ofDays(7)
+        /** Same size as MIN_HORIZON: a small, consistent margin against clock skew. */
+        val HORIZON_SAFETY_MARGIN: Duration = Duration.ofMinutes(5)
     }
 }
