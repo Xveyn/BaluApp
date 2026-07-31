@@ -141,6 +141,31 @@ Run the complete test suite:
 ./gradlew jacocoTestReport
 ```
 
+## Releasing
+
+Releases are cut from a tag, not from a push to `main`. The tag is the source of
+truth for the version: `versionName` comes from it, and `versionCode` is derived
+as `major * 10000 + minor * 100 + patch`.
+
+1. Collect changes under `## [Unreleased]` in `CHANGELOG.md` as you go.
+2. To release, rename that section to `## [1.2.3] - YYYY-MM-DD` and put a fresh
+   empty `## [Unreleased]` above it.
+3. Get the commit onto `main`.
+4. Tag and push:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The release workflow refuses to build if the tag is malformed, if the tagged
+commit is not reachable from `main`, if `CHANGELOG.md` has no section for that
+version, or if the tests fail. The extracted changelog section becomes the
+release notes.
+
+Minor and patch must stay below 100, or the `versionCode` formula loses its
+monotonicity.
+
 ## Security
 
 - JWT tokens stored in EncryptedSharedPreferences
