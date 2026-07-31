@@ -33,7 +33,22 @@ Die einzige Task dieses Plans, deren Lösung **nicht** vorab feststeht. `app/bui
 
 **Interfaces:**
 - Consumes: nichts
-- Produces: eine grüne `NetworkStateManagerBssidTest` und `VpnViewModelTest` im vollen Lauf; die gewählte Gradle-Konfiguration ist die Grundlage für alle folgenden Tasks
+- Produces: eine grüne `NetworkStateManagerBssidTest` im vollen Lauf; die gewählte Gradle-Konfiguration ist die Grundlage für alle folgenden Tasks
+
+> **Nachtrag nach Ausführung (2026-07-31).** Task 1 ist mit `forkEvery = 1` erledigt
+> (Commit `24c9e02`): 46 → 27 Fehlschläge, zwei übereinstimmende Läufe, keine
+> Regression. Die ursprüngliche Akzeptanz „alle 15 OOM-Tests grün" wurde vom
+> Menschen bewusst auf `NetworkStateManagerBssidTest` (8 Tests) eingeschränkt.
+>
+> Grund: ein Kontrollexperiment belegt, dass `maxHeapSize` innerhalb von
+> `unitTests { all { … } }` sehr wohl wirkt (16 MB ließ den Worker abstürzen,
+> `--info` zeigte `-Xmx2g` auf den geforkten JVMs) — und `VpnViewModelTest` fällt
+> trotzdem bei 1 GB, 2 GB **und** 4 GB völlig identisch um; bei 4 GB wurde der Build
+> zusätzlich instabil. Damit ist belegt, dass es kein Sizing-Problem ist, sondern
+> ein Defekt in der Testklasse selbst. Er wird in **Task 8** behandelt.
+>
+> Die unten in Step 4/5 beschriebene Hypothese B ist damit erledigt und war
+> erfolglos; die Steps bleiben als Messprotokoll stehen.
 
 - [ ] **Step 1: Ausgangsstand messen und festhalten**
 
@@ -694,6 +709,92 @@ Erwartet: BUILD SUCCESSFUL. Die Konstruktoränderung an `RegisterDeviceUseCase` 
 git add app/src/main/java/com/baluhost/android/data/remote/api/MobileApiFactory.kt app/src/main/java/com/baluhost/android/di/AppModule.kt app/src/main/java/com/baluhost/android/domain/usecase/auth/RegisterDeviceUseCase.kt app/src/test/java/com/baluhost/android/domain/usecase/auth/RegisterDeviceUseCaseTest.kt
 git commit -m "refactor(auth): build the pairing client through an injected factory"
 ```
+
+---
+
+### Task 8: VpnViewModelTest — OOM in der Testklasse selbst
+
+Nach Task 1 gehört diese Klasse zu den echten Defekten, nicht mehr zum Speicherthema. Belegt: sie fällt in einer **eigenen frischen JVM** mit `OutOfMemoryError` um, und zwar bei 512 MB, 1 GB, 2 GB und 4 GB **identisch**. Mehr Heap ist nachweislich nicht die Lösung — die Klasse hält etwas fest, das sie nicht festhalten sollte. Der Stacktrace zeigt `kotlin.reflect.jvm.internal.impl.metadata.ProtoBuf`, also MockKs Reflection-Pfad.
+
+Diese Task hat als einzige **kein vorgegebenes Ergebnis**. Sie ist eine Untersuchung mit anschließender Reparatur; wenn die Ursache nicht zu finden ist, ist das ein BLOCKED-Report und keine Notlösung.
+
+**Files:**
+- Modify: `app/src/test/java/com/baluhost/android/presentation/ui/screens/vpn/VpnViewModelTest.kt`
+- Ggf. modify: `app/src/main/java/com/baluhost/android/presentation/ui/screens/vpn/VpnViewModel.kt` — nur, wenn die Ursache dort liegt und die Änderung das Laufzeitverhalten nicht verändert
+
+**Interfaces:**
+- Consumes: die Gradle-Konfiguration aus Task 1 (`forkEvery = 1`)
+- Produces: nichts, was andere Tasks nutzen
+
+- [ ] **Step 1: Fehlschlag isoliert reproduzieren**
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain --tests "com.baluhost.android.presentation.ui.screens.vpn.VpnViewModelTest"`
+
+Erwartet: 7 Tests mit `OutOfMemoryError`, dazu ein `AssertionError` in `initial state should show no config when missing` (`expected:<Keine VPN-Konfiguration gefunden> but was:<null>`). Der `AssertionError` ist ein eigener, kleinerer Defekt — behandle ihn in Step 5, nicht vorher.
+
+- [ ] **Step 2: Eingrenzen, welcher Test die Speicherlast erzeugt**
+
+Läuft ein **einzelner** Test der Klasse für sich grün?
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain --tests "com.baluhost.android.presentation.ui.screens.vpn.VpnViewModelTest.initial state should check for VPN config"`
+
+- Grün → die Last entsteht über die Tests **hinweg**, also ist es Zustand, der zwischen ihnen bestehen bleibt. Weiter mit Step 3.
+- Rot → schon ein einzelner Test sprengt den Heap. Dann liegt die Ursache im `setup()` oder im ViewModel-Konstruktor. Weiter mit Step 4.
+
+Halte das Ergebnis im Report fest — es entscheidet, welche der beiden Ursachen vorliegt.
+
+- [ ] **Step 3: Mock-Aufräumen prüfen**
+
+MockK hält gemockte Klassen samt deserialisierter Kotlin-Metadaten fest. Ohne Aufräumen wächst das über die Tests einer Klasse hinweg.
+
+Prüfe in `VpnViewModelTest`, ob es ein `@After` gibt, das `clearAllMocks()` oder `unmockkAll()` aufruft, und ob `Dispatchers.resetMain()` erfolgt. Zum Vergleich: `GetFilesUseCaseTest` hat ein `@After teardown()` mit `clearAllMocks()`, `DashboardViewModelVpnActionTest` ein `@After` mit `Dispatchers.resetMain()`.
+
+Fehlt das Aufräumen, ergänze:
+
+```kotlin
+    @After
+    fun tearDown() {
+        Dispatchers.resetMain()
+        unmockkAll()
+    }
+```
+
+`unmockkAll()` ist gegenüber `clearAllMocks()` das stärkere Mittel: es gibt auch statische und Objekt-Mocks frei, statt nur aufgezeichnete Aufrufe zu vergessen.
+
+- [ ] **Step 4: Auf teure Mocks im Setup prüfen**
+
+Sieh dir an, was `setup()` mockt. `mockk(relaxed = true)` auf einen großen Typ zwingt MockK, dessen komplette Signatur über kotlin-reflect aufzulösen; bei mehreren solchen Mocks pro Test summiert sich das erheblich. Auch ein `@get:Rule`, das pro Test ein neues ViewModel samt Objektgraph baut, kommt in Frage.
+
+Ändere hier **eine** Sache und miss erneut. Nicht mehrere Vermutungen auf einmal — sonst ist am Ende nicht klar, was gewirkt hat.
+
+- [ ] **Step 5: Den AssertionError beheben**
+
+`initial state should show no config when missing` erwartet `Keine VPN-Konfiguration gefunden`, bekommt aber `null`. Das ist dieselbe Art Vertragsdrift wie in Task 5: entweder setzt das ViewModel die Meldung nicht mehr, oder der Test prüft das falsche Feld.
+
+Lies `VpnViewModel`, stelle fest, welches von beidem zutrifft, und ziehe **den Test** nach — das Produktivverhalten bleibt unangetastet, sofern nicht offensichtlich ein Bug vorliegt. Ist es ein echter Bug im ViewModel, repariere ihn nicht selbst, sondern melde ihn im Report.
+
+- [ ] **Step 6: Klasse laufen lassen**
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain --tests "com.baluhost.android.presentation.ui.screens.vpn.VpnViewModelTest"`
+
+Erwartet: BUILD SUCCESSFUL, 8/8 grün, kein `OutOfMemoryError`.
+
+Bekommst du den OOM nicht weg: **BLOCKED melden.** Kein `@Ignore`, keine gelöschten Tests, kein Heap-Bump als Umgehung — Task 1 hat bereits belegt, dass Heap hier nicht hilft. Berichte, was Step 2 ergeben hat, was du geändert und gemessen hast.
+
+- [ ] **Step 7: Volle Suite, zweimal**
+
+Run: `.\gradlew.bat testDebugUnitTest --console=plain` — und danach ein zweites Mal.
+
+Erwartet: **`102 tests completed, 0 failed`** in beiden Läufen. Zwei Läufe, weil diese Suite nachweislich schwankt.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add app/src/test/java/com/baluhost/android/presentation/ui/screens/vpn/VpnViewModelTest.kt
+git commit -m "test(vpn): stop the VPN view model tests exhausting their JVM"
+```
+
+Wurde auch `VpnViewModel.kt` geändert, gehört sie mit in denselben `git add`.
 
 ---
 
