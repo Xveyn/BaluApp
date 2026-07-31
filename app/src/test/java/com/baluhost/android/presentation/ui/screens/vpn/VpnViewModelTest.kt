@@ -47,12 +47,31 @@ class VpnViewModelTest {
     // hazard with its own clearViewModel() helper, which reaches ViewModel.clear() via
     // reflection. We use ViewModelStore here instead because put()/clear() reaches the same
     // method through public API, but it's the same underlying fix for the same problem.
+    //
+    // ViewModelStore.put() only calls clear() on the previously-stored entry from
+    // Lifecycle 2.8 onward; this project pins 2.8.x (see app/build.gradle.kts). On an
+    // older Lifecycle version put() would not cancel anything, this fix would silently
+    // stop working, and the OOM described above would return.
     private val viewModelStore = ViewModelStore()
 
     private fun newViewModel(): VpnViewModel {
         val vm = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, vpnRepository, preferencesManager, context)
         viewModelStore.put("vpnViewModel", vm) // clears any previously stored VM's scope first
         return vm
+    }
+
+    // The @After teardown's viewModelStore.clear() is not a substitute for calling it
+    // inside the test body: teardown runs after runTest{}'s terminal advanceUntilIdle(),
+    // which is exactly the step that hangs against the unbounded status-monitoring loop
+    // (see the comment on viewModelStore above). So the in-body call is load-bearing, and
+    // a test written without it would OOM with a misleading stacktrace. Wrapping it here
+    // means a new test using vpnTest{} cannot forget it.
+    private fun vpnTest(body: suspend TestScope.() -> Unit) = runTest {
+        try {
+            body()
+        } finally {
+            viewModelStore.clear()
+        }
     }
 
     @Before
@@ -87,7 +106,7 @@ class VpnViewModelTest {
     }
 
     @Test
-    fun `initial state should check for VPN config`() = runTest {
+    fun `initial state should check for VPN config`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config_string")
 
@@ -101,11 +120,10 @@ class VpnViewModelTest {
             assertTrue(state.hasConfig)
             assertFalse(state.isConnected)
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `initial state should show no config when missing`() = runTest {
+    fun `initial state should show no config when missing`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
 
@@ -122,11 +140,10 @@ class VpnViewModelTest {
             // stubbed exception message from setup().
             assertEquals("Konfiguration konnte nicht geladen werden: No config", state.error)
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `connect should transition to connected state on success`() = runTest {
+    fun `connect should transition to connected state on success`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
 
@@ -151,11 +168,10 @@ class VpnViewModelTest {
             assertFalse(connectedState.isLoading)
             assertNull(connectedState.error)
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `connect should show error on failure`() = runTest {
+    fun `connect should show error on failure`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
 
@@ -182,11 +198,10 @@ class VpnViewModelTest {
             // "Verbindung fehlgeschlagen: " rather than surfacing it verbatim.
             assertEquals("Verbindung fehlgeschlagen: $errorMessage", errorState.error)
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `disconnect should transition to disconnected state on success`() = runTest {
+    fun `disconnect should transition to disconnected state on success`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
 
@@ -216,11 +231,10 @@ class VpnViewModelTest {
             assertFalse(disconnectedState.isConnected)
             assertFalse(disconnectedState.isLoading)
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `connect should do nothing when already connected`() = runTest {
+    fun `connect should do nothing when already connected`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
 
@@ -241,11 +255,10 @@ class VpnViewModelTest {
         coVerify(exactly = 1) {
             connectVpnUseCase()
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `disconnect should do nothing when already disconnected`() = runTest {
+    fun `disconnect should do nothing when already disconnected`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
 
@@ -260,11 +273,10 @@ class VpnViewModelTest {
         coVerify(exactly = 0) {
             disconnectVpnUseCase()
         }
-        viewModelStore.clear()
     }
 
     @Test
-    fun `should not connect or disconnect while loading`() = runTest {
+    fun `should not connect or disconnect while loading`() = vpnTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
 
@@ -293,6 +305,5 @@ class VpnViewModelTest {
         coVerify(exactly = 1) {
             connectVpnUseCase()
         }
-        viewModelStore.clear()
     }
 }

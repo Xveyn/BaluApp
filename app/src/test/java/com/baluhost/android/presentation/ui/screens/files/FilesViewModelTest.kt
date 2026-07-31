@@ -129,28 +129,24 @@ class FilesViewModelTest {
 
         coEvery { getFilesUseCase("documents") } returns Result.Success(files)
 
+        // Let init's own root loadFiles("") settle before opening the Turbine block
+        // (mirrors `navigateToFolder should update path and load files` below), so the
+        // only loading transition left to observe is the one this test triggers itself
+        // rather than a loading state from that concurrent root load.
+        testDispatcher.scheduler.advanceUntilIdle()
+
         // When
         viewModel.uiState.test {
-            skipItems(1) // Initial state
+            skipItems(1) // Settled initial state
 
             viewModel.loadFiles("documents")
             testDispatcher.scheduler.advanceUntilIdle()
 
-            // Then - ViewModel.init kicks off its own root loadFiles("") concurrently
-            // with the explicit call above, so an unpredictable number of loading /
-            // settled states for path "" can arrive first. Drain until we reach the
-            // settled state for the path this test actually triggered, rather than
-            // assuming a fixed number of emissions. Track whether a loading state
-            // was observed along the way so we still prove the load goes through a
-            // loading phase - a ViewModel that stopped reporting progress entirely
-            // would otherwise still pass.
-            var sawLoading = false
-            var state = awaitItem()
-            while (state.isLoading || state.currentPath != "documents") {
-                if (state.isLoading) sawLoading = true
-                state = awaitItem()
-            }
-            assertTrue(sawLoading)
+            // Then
+            val loadingState = awaitItem()
+            assertTrue(loadingState.isLoading)
+
+            val state = awaitItem()
             assertEquals(1, state.files.size)
             assertEquals("documents", state.currentPath)
             assertFalse(state.isLoading)
@@ -325,23 +321,54 @@ class FilesViewModelTest {
         val errorMessage = "Network error"
         
         coEvery { getFilesUseCase("documents") } returns Result.Error(Exception(errorMessage))
-        
+
+        // loadFiles()'s error branch picks a network/server-specific message when offline
+        // or the server is unreachable, and only falls through to the exception's own
+        // message in the else branch (FilesViewModel.kt:242-252). Both mocks default to
+        // offline/unreachable (relaxed = true), which would silently route this into one
+        // of those other branches instead of the else branch this test exercises.
+        every { networkMonitor.isCurrentlyOnline() } returns true
+        every { serverConnectivityChecker.isCurrentlyReachable() } returns true
+
         testDispatcher.scheduler.advanceUntilIdle()
-        
+
         // When
         viewModel.uiState.test {
             skipItems(1)
-            
+
             viewModel.loadFiles("documents")
             testDispatcher.scheduler.advanceUntilIdle()
-            
+
             // Then
             skipItems(1) // Loading state
 
             val errorState = awaitItem()
             assertFalse(errorState.isLoading)
-            // The ViewModel does not pass the cause's text through — it reports
-            // its own user-facing wording, so the stub's message is only an input.
+            assertEquals(errorMessage, errorState.error)
+        }
+    }
+
+    @Test
+    fun `loadFiles should show offline message when offline with no cache`() = runTest {
+        // Given - networkMonitor defaults to offline (relaxed mock) and there is no
+        // cached file list yet, so loadFiles()'s error branch reports the offline-specific
+        // wording rather than the exception's own message (FilesViewModel.kt:242-252).
+        coEvery { getFilesUseCase("documents") } returns Result.Error(Exception("Network error"))
+
+        testDispatcher.scheduler.advanceUntilIdle()
+
+        // When
+        viewModel.uiState.test {
+            skipItems(1)
+
+            viewModel.loadFiles("documents")
+            testDispatcher.scheduler.advanceUntilIdle()
+
+            // Then
+            skipItems(1) // Loading state
+
+            val errorState = awaitItem()
+            assertFalse(errorState.isLoading)
             assertEquals("Keine Verbindung zum Server", errorState.error)
         }
     }
