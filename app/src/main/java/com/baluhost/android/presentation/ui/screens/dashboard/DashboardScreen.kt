@@ -1103,8 +1103,22 @@ private fun ServerStatusStrip(
                                     DesktopState.UNKNOWN -> {}
                                 }
                             }
-                            // Admin-only, because the plugin menu-action route is.
-                            if (isAdmin && gamingModeAvailable) {
+                            // Gated on gamingModeAvailable alone — the ViewModel
+                            // is the single authority for "may be shown" and
+                            // already folds the admin check into that value (see
+                            // onPowerDialogOpened()). Unlike the desktop toggle
+                            // above, there is no delegable permission to check
+                            // here: plugin menu actions have no per-user grant
+                            // on the server, the route is hard admin-only. The
+                            // desktop toggle instead has a real delegable
+                            // `can_toggle_desktop` permission, hence the `||`
+                            // there versus this single flag here. Gaming-mode
+                            // availability additionally comes from
+                            // `plugins/ui/manifest`, refetched on every dialog
+                            // open, because the plugin can be switched off
+                            // server-side. See
+                            // docs/superpowers/specs/2026-07-31-app-desktop-toggle-gaming-mode-design.md.
+                            if (gamingModeAvailable) {
                                 PowerOptionButton(
                                     icon = Icons.Default.SportsEsports,
                                     label = "Gaming-Modus",

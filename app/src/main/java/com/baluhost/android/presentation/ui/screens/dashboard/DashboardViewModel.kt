@@ -576,6 +576,10 @@ class DashboardViewModel @Inject constructor(
      * entries do not flicker.
      */
     fun onPowerDialogOpened() {
+        // Nothing in the ONLINE branch of the power dialog is rendered for any
+        // other status, and a desktop-status call against an offline/sleeping
+        // server can only time out — so skip it entirely.
+        if (_nasStatus.value != NasStatus.ONLINE) return
         viewModelScope.launch {
             when (val result = getDesktopStatusUseCase()) {
                 is Result.Success -> _desktopState.value = result.data
@@ -587,10 +591,15 @@ class DashboardViewModel @Inject constructor(
                 }
                 else -> {}
             }
-            // The plugin menu-action route is admin-only server-side, so asking
-            // on anyone else's behalf could only ever produce a 403.
-            if (_isAdmin.value) {
-                _gamingModeAvailable.value = isGamingModeAvailableUseCase()
+            // gamingModeAvailable means "may be shown" — it is set explicitly in
+            // both branches so a non-admin's `false` is a decision, not a value
+            // left stale by omission. The plugin menu-action route is
+            // admin-only server-side, so asking on anyone else's behalf could
+            // only ever produce a 403; non-admins simply never get to see it.
+            _gamingModeAvailable.value = if (_isAdmin.value) {
+                isGamingModeAvailableUseCase()
+            } else {
+                false
             }
         }
     }
@@ -601,8 +610,16 @@ class DashboardViewModel @Inject constructor(
             when (val result = enableDesktopUseCase()) {
                 is Result.Success -> {
                     _desktopState.value = DesktopState.RUNNING
-                    // One emission only: _snackbarEvent buffers a single item, so
-                    // a separate lock-screen notice would swallow this message.
+                    // One emission only: two consecutive snackbars for a single
+                    // user action would be poor UX, and the lock-screen state is
+                    // a qualifier on the same outcome, not a separate event, so
+                    // it belongs folded into this one message. (With
+                    // extraBufferCapacity = 1 and the default
+                    // BufferOverflow.SUSPEND, a second emit here would not be
+                    // dropped anyway — it would suspend until collected, which
+                    // would delay the _powerActionInProgress reset below. That
+                    // path is not reachable since we only ever emit once, but
+                    // it is a second, independent reason to keep it that way.)
                     _snackbarEvent.emit(
                         if (result.data.sessionUnlocked == false) {
                             "Displays an – Session ist noch gesperrt"
@@ -611,9 +628,18 @@ class DashboardViewModel @Inject constructor(
                         }
                     )
                 }
-                is Result.Error -> _snackbarEvent.emit(
-                    result.exception.message ?: "Displays einschalten fehlgeschlagen"
-                )
+                is Result.Error -> {
+                    // A failed action means the app no longer knows the truth —
+                    // e.g. the documented partial failure "Displays sind an,
+                    // aber Steam startete nicht" lands here too, so a prior
+                    // STOPPED would now be a lie. UNKNOWN hides the entry until
+                    // the next refresh resolves it, which is strictly better
+                    // than keeping a belief that may be wrong.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    _snackbarEvent.emit(
+                        result.exception.message ?: "Displays einschalten fehlgeschlagen"
+                    )
+                }
                 else -> {}
             }
             _powerActionInProgress.value = false
@@ -628,9 +654,15 @@ class DashboardViewModel @Inject constructor(
                     _desktopState.value = DesktopState.STOPPED
                     _snackbarEvent.emit("Displays deaktiviert")
                 }
-                is Result.Error -> _snackbarEvent.emit(
-                    result.exception.message ?: "Displays ausschalten fehlgeschlagen"
-                )
+                is Result.Error -> {
+                    // See enableDesktop(): a failed action means the app no
+                    // longer knows the truth, so fall back to UNKNOWN rather
+                    // than keep a belief that may now be wrong.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    _snackbarEvent.emit(
+                        result.exception.message ?: "Displays ausschalten fehlgeschlagen"
+                    )
+                }
                 else -> {}
             }
             _powerActionInProgress.value = false
@@ -649,9 +681,17 @@ class DashboardViewModel @Inject constructor(
                     // resolved it to German.
                     _snackbarEvent.emit(result.data)
                 }
-                is Result.Error -> _snackbarEvent.emit(
-                    result.exception.message ?: "Gaming-Modus fehlgeschlagen"
-                )
+                is Result.Error -> {
+                    // The documented partial failure is "Displays sind an, aber
+                    // Steam startete nicht" — displays are on, only Steam
+                    // failed, so the prior desktopState (possibly STOPPED) is
+                    // now wrong. See enableDesktop(): fall back to UNKNOWN
+                    // rather than keep a belief that may be false.
+                    _desktopState.value = DesktopState.UNKNOWN
+                    _snackbarEvent.emit(
+                        result.exception.message ?: "Gaming-Modus fehlgeschlagen"
+                    )
+                }
                 else -> {}
             }
             _powerActionInProgress.value = false
