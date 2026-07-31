@@ -90,7 +90,12 @@ class DashboardViewModelVpnActionTest {
             checkNasStatusUseCase = mockk(relaxed = true),
             getCurrentUptimeUseCase = mockk(relaxed = true),
             getMyPowerPermissionsUseCase = mockk(relaxed = true),
-            sendWakeUseCase = mockk(relaxed = true)
+            sendWakeUseCase = mockk(relaxed = true),
+            getDesktopStatusUseCase = mockk(relaxed = true),
+            enableDesktopUseCase = mockk(relaxed = true),
+            disableDesktopUseCase = mockk(relaxed = true),
+            isGamingModeAvailableUseCase = mockk(relaxed = true),
+            startGamingModeUseCase = mockk(relaxed = true)
         )
     }
 
