@@ -1,6 +1,8 @@
 package com.baluhost.android.di
 
 import android.content.Context
+import com.baluhost.android.data.remote.api.MobileApiFactory
+import com.baluhost.android.data.remote.api.RetrofitMobileApiFactory
 import com.baluhost.android.util.AndroidBase64Decoder
 import com.baluhost.android.util.Base64Decoder
 import com.baluhost.android.util.NetworkMonitor
@@ -34,4 +36,8 @@ object AppModule {
     @Provides
     @Singleton
     fun provideBase64Decoder(): Base64Decoder = AndroidBase64Decoder()
+
+    @Provides
+    @Singleton
+    fun provideMobileApiFactory(): MobileApiFactory = RetrofitMobileApiFactory()
 }

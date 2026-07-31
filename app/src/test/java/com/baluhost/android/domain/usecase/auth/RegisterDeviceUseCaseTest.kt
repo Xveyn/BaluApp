@@ -2,6 +2,7 @@ package com.baluhost.android.domain.usecase.auth
 
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.MobileApi
+import com.baluhost.android.data.remote.api.MobileApiFactory
 import com.baluhost.android.data.remote.dto.DeviceInfoDto
 import com.baluhost.android.data.remote.dto.MobileDeviceDto
 import com.baluhost.android.data.remote.dto.RegisterDeviceRequest
@@ -9,6 +10,7 @@ import com.baluhost.android.data.remote.dto.RegisterDeviceResponse
 import com.baluhost.android.data.remote.dto.UserDto
 import com.baluhost.android.util.Result
 import io.mockk.*
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import org.junit.After
 import org.junit.Before
@@ -16,16 +18,24 @@ import org.junit.Test
 import org.junit.Assert.*
 
 class RegisterDeviceUseCaseTest {
-    
+
     private lateinit var mobileApi: MobileApi
+    private lateinit var mobileApiFactory: MobileApiFactory
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var registerDeviceUseCase: RegisterDeviceUseCase
-    
+
     @Before
     fun setup() {
         mobileApi = mockk()
         preferencesManager = mockk(relaxed = true)
-        registerDeviceUseCase = RegisterDeviceUseCase(mobileApi, preferencesManager)
+        every { preferencesManager.getFcmToken() } returns flowOf(null)
+        // The use case builds its client from the QR code's server URL. Handing
+        // back the mock here is what makes the coEvery stubs below take effect —
+        // previously the injected MobileApi was ignored and a real Retrofit went
+        // looking for https://test.com/api/.
+        mobileApiFactory = mockk()
+        every { mobileApiFactory.create(any(), any()) } returns mobileApi
+        registerDeviceUseCase = RegisterDeviceUseCase(mobileApiFactory, preferencesManager)
     }
     
     @After
@@ -52,7 +62,8 @@ class RegisterDeviceUseCaseTest {
             username = "testuser",
             email = "test@example.com",
             role = "user",
-            createdAt = System.currentTimeMillis().toString(),
+            // Instant.parse() in the use case requires ISO-8601, not raw millis.
+            createdAt = java.time.Instant.now().toString(),
             isActive = true
         )
         
