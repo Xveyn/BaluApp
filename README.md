@@ -1,66 +1,85 @@
 # BaluHost Android App
 
-Native Android mobile client for BaluHost NAS management system.
+Native Android mobile client for the BaluHost NAS management system.
+
+The server lives in its own repository. This app talks to its FastAPI backend and
+mirrors much of what the BaluHost web app can do — file access, power management,
+VPN, and sync.
 
 ## Technology Stack
 
-- **Language:** Kotlin 1.9+
+- **Language:** Kotlin 2.0.0
 - **UI Framework:** Jetpack Compose with Material 3
-- **Architecture:** Clean Architecture + MVVM
-- **Dependency Injection:** Hilt
-- **Networking:** Retrofit + OkHttp
+- **Architecture:** MVVM, layered data / domain / presentation
+- **Dependency Injection:** Hilt 2.51.1
+- **Networking:** Retrofit + OkHttp + Gson
 - **Local Storage:** Room + DataStore
 - **VPN:** WireGuard Android Library
-- **Min SDK:** 26 (Android 8.0)
-- **Target SDK:** 34 (Android 14)
+- **Build:** AGP 8.5.2, Gradle 8.9, Java 21
+- **Min SDK:** 26 (Android 8.0) · **Target/Compile SDK:** 35
 
 ## Features
 
 - 📱 QR code device registration with ML Kit barcode scanning
-- 🔐 Secure JWT authentication with automatic token refresh
-- 🔒 WireGuard VPN integration for secure remote access
-- 📂 File management with upload/download/delete operations
-- 📁 Android Files app integration via DocumentsProvider
-- 📸 Automatic camera backup with WorkManager
-- ⚙️ Background sync with configurable settings
-- 🌙 Material 3 design with dark mode support
+- 🔐 JWT authentication with automatic token refresh
+- 🔒 WireGuard VPN integration for remote access
+- 📂 File browsing with upload, download and delete
+- ⚡ Power management: wake, soft sleep, suspend, display toggle, gaming mode
+- 🌙 Sleep configuration including an admin-settable always-awake override
+- 🔄 Folder sync with schedules, plus an offline queue for actions taken while away
+- 📊 Monitoring and energy dashboards
+- 🔏 Optional app lock with PIN or biometrics
 
 ## Project Structure
 
 ```
 app/src/main/java/com/baluhost/android/
 ├── BaluHostApplication.kt          # Application class with Hilt
-├── di/                             # Dependency Injection modules
-├── data/                           # Data layer (API, Database, Repository)
-│   ├── local/
-│   ├── remote/
-│   └── repository/
-├── domain/                         # Domain layer (Models, UseCases)
-│   ├── model/
-│   ├── repository/
-│   └── usecase/
-├── presentation/                   # Presentation layer (UI, ViewModels)
-│   ├── ui/
-│   └── navigation/
-└── service/                        # Android Services (VPN, Sync, Provider)
+├── di/                             # Hilt modules
+├── data/
+│   ├── local/                      # Room, DataStore, encrypted storage
+│   ├── remote/                     # Retrofit APIs, DTOs, interceptors
+│   ├── repository/                 # Repository implementations
+│   ├── sync/                       # Sync orchestration
+│   ├── worker/                     # WorkManager workers
+│   └── notification/               # FCM and WebSocket notifications
+├── domain/
+│   ├── model/                      # Domain types
+│   ├── repository/                 # Repository interfaces
+│   └── usecase/                    # Use cases
+├── presentation/
+│   ├── ui/                         # Screens, ViewModels, components, theme
+│   └── navigation/                 # Routes and NavGraph
+├── service/, services/             # Android services (VPN, FCM)
+└── util/                           # Cross-cutting helpers
 ```
+
+Most of these directories carry their own `CLAUDE.md` describing the conventions
+that apply there. Start from the root [`CLAUDE.md`](CLAUDE.md).
 
 ## Setup
 
 ### Prerequisites
 
-- Android Studio Hedgehog (2023.1.1) or later
-- JDK 17
-- Android SDK with API 34
-- Gradle 8.1+
+- An Android Studio recent enough for AGP 8.5.2
+- **JDK 21** — the build sets `sourceCompatibility`/`targetCompatibility` to 21
+  and will not run on 17
+- Android SDK with API 35
+- Gradle comes from the wrapper; no separate install needed
 
 ### Building
 
-1. Clone the repository
-2. Open project in Android Studio
-3. Sync Gradle files
-4. Update `BASE_URL` in `app/build.gradle.kts` with your server address
-5. Build and run on emulator or device
+1. Clone the repository.
+2. **Provide `app/google-services.json`.** It is gitignored and the
+   `com.google.gms.google-services` plugin fails the build without it, so a
+   fresh clone does not compile until you supply one. CI reconstructs it from a
+   repository secret.
+3. Open the project in Android Studio and sync Gradle.
+4. Build and run on a device or emulator.
+
+You do **not** need to edit `BASE_URL` in `app/build.gradle.kts`. It is only a
+fallback — `DynamicBaseUrlInterceptor` rewrites the host at runtime from the
+server address stored during device registration.
 
 ### Development
 
@@ -68,78 +87,57 @@ app/src/main/java/com/baluhost/android/
 # Build debug APK
 ./gradlew assembleDebug
 
-# Run unit tests
-./gradlew test
-
-# Run instrumented tests
-./gradlew connectedAndroidTest
-
-# Generate test coverage report
-./gradlew jacocoTestReport
+# Run unit tests — see the warning below before trusting a green run
+./gradlew cleanTestDebugUnitTest testDebugUnitTest --no-build-cache
 ```
 
-## Implementation Progress
+> **The build cache can fake a passing test run.** `gradle.properties` sets
+> `org.gradle.caching=true`, so a bare `./gradlew test` may report
+> `BUILD SUCCESSFUL` with `FROM-CACHE` without executing anything, and Gradle
+> prints no test count when everything passes. Always use the command above, and
+> see [`app/src/test/CLAUDE.md`](app/src/test/CLAUDE.md) for how to confirm the
+> run actually happened.
 
-### Phase 1: Authentication + QR (2 weeks) - 🚧 In Progress
-- [ ] Project setup and dependencies
-- [ ] QR scanner with ML Kit
-- [ ] Device registration flow
-- [ ] Token management with DataStore
-- [ ] Secure storage with EncryptedSharedPreferences
+There is no `androidTest` source set — no instrumented or Compose UI tests exist,
+and there is no coverage plugin configured. Anything needing a device is verified
+by hand.
 
-### Phase 2: VPN + Files (2 weeks) - ⏳ Pending
-- [ ] WireGuard VPN service
-- [ ] VPN connection UI
-- [ ] File browser with Compose
-- [ ] Upload/download with progress
-- [ ] File operations (delete, move, rename)
+## Status
 
-### Phase 3: Advanced Features (2 weeks) - ⏳ Pending
-- [ ] Camera backup with WorkManager
-- [ ] DocumentsProvider for Files app
-- [ ] Background sync configuration
-- [ ] Settings screen
-- [ ] Offline mode
+The app is in active use against a live BaluHost server. Authentication, VPN,
+file access, power management, sleep configuration, sync and monitoring all work
+on-device.
 
-### Phase 4: Testing + Polish (1 week) - ⏳ Pending
-- [ ] Unit tests for all use cases
-- [ ] UI tests with Compose Test
-- [ ] Integration tests with MockWebServer
-- [ ] Performance optimization
-- [ ] Accessibility improvements
+Known gaps:
+
+- The `DocumentsProvider` for Android Files app integration is written but
+  commented out in `AndroidManifest.xml` — it needs finishing before it can be
+  enabled.
+- There is no automatic camera or photo backup.
+- `presentation/ui/screens/WebDavScreen.kt` exists but is not wired into
+  navigation, so it cannot currently be reached.
 
 ## Documentation
 
-- **Full Implementation Guide:** `/docs/ANDROID_APP_GUIDE.md`
-- **Backend API Reference:** `/docs/api/API_REFERENCE.md`
-- **Architecture Overview:** `/docs/ARCHITECTURE.md`
+- **Architecture and conventions:** [`CLAUDE.md`](CLAUDE.md) and the per-directory
+  `CLAUDE.md` files it indexes
+- **Design specs and implementation plans:** `docs/superpowers/`
+- **Changelog:** [`CHANGELOG.md`](CHANGELOG.md)
 
 ## Backend API
 
 The app connects to the BaluHost FastAPI backend. Key endpoints:
 
-- `POST /api/mobile/token/generate?include_vpn=true` - Generate QR (Desktop)
-- `POST /api/mobile/register` - Register device
-- `POST /api/auth/refresh` - Refresh access token
-- `GET /api/files/list?path=<path>` - List files
-- `POST /api/files/upload` - Upload file
-- `GET /api/files/download?path=<path>` - Download file
-- `POST /api/vpn/generate-config` - Generate VPN config
+- `POST /api/mobile/token/generate?include_vpn=true` — generate QR (desktop)
+- `POST /api/mobile/register` — register device
+- `POST /api/auth/refresh` — refresh access token
+- `GET /api/files/list?path=<path>` — list files
+- `POST /api/files/upload` — upload file
+- `GET /api/files/download?path=<path>` — download file
+- `POST /api/vpn/generate-config` — generate VPN config
 
-## Testing
-
-Run the complete test suite:
-
-```bash
-# Unit tests
-./gradlew test
-
-# Instrumented tests (requires emulator/device)
-./gradlew connectedAndroidTest
-
-# Coverage report
-./gradlew jacocoTestReport
-```
+The full set is visible in `data/remote/api/` — one Retrofit interface per
+feature area.
 
 ## Releasing
 
@@ -189,15 +187,17 @@ and retry from scratch:
 
 ## Security
 
-- JWT tokens stored in EncryptedSharedPreferences
-- Network communication over HTTPS with certificate pinning
-- VPN credentials encrypted at rest
-- File data never cached unencrypted
-
-## License
-
-See [LICENSE](../LICENSE) in root directory.
-
-## Contributing
-
-See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
+- Access and refresh tokens are held in `EncryptedSharedPreferences` via
+  `data/local/security/SecurePreferencesManager.kt`.
+- The app can be locked behind a PIN or biometric prompt (`AppLockManager`,
+  `PinManager`, `BiometricAuthManager`).
+- **Cleartext HTTP is permitted deliberately.** `AndroidManifest.xml` sets
+  `usesCleartextTraffic="true"` and `res/xml/network_security_config.xml` allows
+  it for the whole base config, because a NAS on the local network is usually
+  reached by hostname or IP where a valid certificate is impractical. A
+  self-signed BaluHost certificate is trusted for `baluhost.local`, `baluhost`
+  and one hardcoded LAN address. There is **no certificate pinning**, and the
+  base config also trusts user-installed CAs. Remote access is meant to go
+  through the WireGuard tunnel rather than over the open internet.
+- The `cached_files` Room table is a plain, unencrypted table holding file
+  metadata and the local path of any downloaded content.
