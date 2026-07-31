@@ -69,13 +69,6 @@ android {
     testOptions {
         unitTests {
             isReturnDefaultValues = true
-            all {
-                // MockK deserialises Kotlin metadata through kotlin-reflect and
-                // holds onto it. Across a full run that outgrows the Test task's
-                // 512m default, and whichever class runs late dies with an OOM.
-                // A fresh JVM per class keeps the accumulation bounded.
-                it.forkEvery = 1
-            }
         }
     }
 
