@@ -245,6 +245,16 @@ ein Nachfragen wäre eine überflüssige Runde.
 Emissionen würden eine verschlucken. Deshalb wird der Sperrbildschirm-Hinweis in
 die eine Meldung gefaltet:
 
+> **Korrektur (2026-07-31, Review-Fixwelle):** Die obige Begründung ist falsch.
+> `extraBufferCapacity = 1` hat als Default `BufferOverflow.SUSPEND`, nicht
+> `DROP_OLDEST`, und der Code ruft `emit`, nicht `tryEmit` — eine zweite
+> Emission würde also puffern und zugestellt, nicht verschluckt. Die
+> Entscheidung, beide Aussagen in eine Meldung zu falten, bleibt richtig
+> (eine Meldung statt zwei Toasts ist die bessere UX, und der
+> Sperrbildschirm-Hinweis ist ein Qualifikator desselben Ergebnisses, kein
+> eigenes Ereignis) — nur die hier genannte Begründung war es nicht. Siehe
+> Kommentar in `DashboardViewModel.enableDesktop()`.
+
 | Ergebnis | Meldung |
 |---|---|
 | `enable` ok, `session_unlocked == false` | „Displays an – Session ist noch gesperrt" |
