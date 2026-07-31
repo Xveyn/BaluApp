@@ -74,3 +74,27 @@ data class MyPowerPermissionsDto(
     @SerializedName("can_unlock_session")
     val canUnlockSession: Boolean = false
 )
+
+data class DesktopStatusDto(
+    @SerializedName("state")
+    val state: String = "unknown",
+    @SerializedName("display_manager")
+    val displayManager: String = "",
+    @SerializedName("detail")
+    val detail: String? = null
+)
+
+/**
+ * Covers both desktop routes. The disable route answers with success/message
+ * only, so the two unlock fields stay null there.
+ */
+data class DesktopActionResponseDto(
+    @SerializedName("success")
+    val success: Boolean = false,
+    @SerializedName("message")
+    val message: String = "",
+    @SerializedName("session_unlocked")
+    val sessionUnlocked: Boolean? = null,
+    @SerializedName("unlock_message")
+    val unlockMessage: String? = null
+)

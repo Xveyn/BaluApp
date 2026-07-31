@@ -1,5 +1,7 @@
 package com.baluhost.android.data.remote.api
 
+import com.baluhost.android.data.remote.dto.DesktopActionResponseDto
+import com.baluhost.android.data.remote.dto.DesktopStatusDto
 import com.baluhost.android.data.remote.dto.MyPowerPermissionsDto
 import com.baluhost.android.data.remote.dto.PowerActionResponse
 import retrofit2.http.GET
@@ -18,4 +20,13 @@ interface SleepApi {
 
     @POST("system/sleep/wake")
     suspend fun sendWake(): PowerActionResponse
+
+    @GET("system/sleep/desktop/status")
+    suspend fun getDesktopStatus(): DesktopStatusDto
+
+    @POST("system/sleep/desktop/disable")
+    suspend fun disableDesktop(): DesktopActionResponseDto
+
+    @POST("system/sleep/desktop/enable")
+    suspend fun enableDesktop(): DesktopActionResponseDto
 }
