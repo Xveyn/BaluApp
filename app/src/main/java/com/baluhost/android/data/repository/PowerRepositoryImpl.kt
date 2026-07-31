@@ -12,7 +12,9 @@ import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.repository.PowerRepository
 import com.baluhost.android.util.Result
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import retrofit2.HttpException
+import java.io.IOException
 import javax.inject.Inject
 
 class PowerRepositoryImpl @Inject constructor(
@@ -61,14 +63,29 @@ class PowerRepositoryImpl @Inject constructor(
 
     override suspend fun sendSuspend(): Result<String> {
         return try {
-            val response = sleepApi.sendSuspend()
+            // The server carries out the suspend and is gone before it can reply,
+            // so this call would otherwise sit on OkHttp's 120s read timeout —
+            // long enough that everything the caller does afterwards happens two
+            // minutes too late to be useful. The server acts within a few hundred
+            // milliseconds, so silence past this window already means it did.
+            val response = withTimeoutOrNull(SUSPEND_ACK_TIMEOUT_MS) { sleepApi.sendSuspend() }
+                ?: return Result.Success("System wird suspendiert")
             if (response.success) {
                 Result.Success(response.message)
             } else {
                 Result.Error(Exception(response.message))
             }
         } catch (e: HttpException) {
+            // The server answered, and said no — e.g. 403 without the permission.
             Result.Error(Exception("Suspend fehlgeschlagen: ${e.message()}", e))
+        } catch (e: IOException) {
+            // No HTTP answer at all. For a suspend that is the *expected* outcome:
+            // the server carries out the request and stops answering before it can
+            // reply, so the POST dies on the wire. Reporting this as a failure made
+            // the caller skip its whole post-suspend handling, which is why the NAS
+            // kept showing as awake. The dialog only offers Suspend while the server
+            // reads as online, so "was never reachable" is already largely excluded.
+            Result.Success("System wird suspendiert")
         } catch (e: Exception) {
             Result.Error(Exception("Server nicht erreichbar", e))
         }
@@ -158,7 +175,13 @@ class PowerRepositoryImpl @Inject constructor(
             val password = preferencesManager.getFritzBoxPassword() ?: ""
 
             when (val result = fritzBoxClient.checkHostActive(host, port, username, password, mac)) {
-                is WolResult.Success -> NasStatusResult.Resolved(NasStatus.ONLINE)
+                // Deliberately NOT ONLINE. This runs only after a telemetry call has
+                // already failed, so the server is demonstrably unreachable — and the
+                // Fritz!Box's NewActive flag hangs on ARP and lease timeouts, not on
+                // whether the machine is awake. Measured on a real suspend, it went on
+                // reporting the host as active for more than two minutes. Trusting it
+                // here made the app contradict the evidence it had just collected.
+                is WolResult.Success -> NasStatusResult.Resolved(NasStatus.SLEEPING)
                 is WolResult.Error -> {
                     if (result.message == "inactive") {
                         NasStatusResult.Resolved(NasStatus.SLEEPING)
@@ -172,5 +195,15 @@ class PowerRepositoryImpl @Inject constructor(
         } catch (e: Exception) {
             NasStatusResult.FritzBoxUnreachable
         }
+    }
+
+    private companion object {
+        /**
+         * How long to wait for the server to acknowledge a suspend before taking
+         * its silence as confirmation. Deliberately far below the client's 120s
+         * read timeout — a suspending server never answers, and the caller needs
+         * to know now, not in two minutes.
+         */
+        const val SUSPEND_ACK_TIMEOUT_MS = 5_000L
     }
 }
