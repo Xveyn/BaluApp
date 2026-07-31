@@ -1,7 +1,9 @@
 package com.baluhost.android.presentation.ui.screens.settings
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -13,6 +15,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.theme.*
 import kotlinx.coroutines.delay
 import java.time.Duration
@@ -58,59 +61,70 @@ fun AlwaysAwakeScreen(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
             )
         },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-        containerColor = Slate950
-    ) { padding ->
-        Column(
-            modifier = Modifier
-                .padding(padding)
-                .padding(horizontal = 16.dp)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            when {
-                uiState.isLoading -> Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
-                    contentAlignment = Alignment.Center
-                ) { CircularProgressIndicator(color = Sky400) }
-
-                uiState.loadError != null -> LoadErrorBlock(
-                    message = uiState.loadError!!,
-                    onRetry = { viewModel.load() }
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = Slate800,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(12.dp)
                 )
+            }
+        },
+        containerColor = Color.Transparent
+    ) { padding ->
+        BaluBackground {
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(horizontal = 16.dp)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                when {
+                    uiState.isLoading -> Box(
+                        modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                        contentAlignment = Alignment.Center
+                    ) { CircularProgressIndicator(color = Sky400) }
 
-                else -> {
-                    MasterSwitch(
-                        enabled = uiState.enabled,
-                        isSaving = uiState.isSaving,
-                        onToggle = { on -> if (on) viewModel.setPreset(null) else viewModel.disable() }
+                    uiState.loadError != null -> LoadErrorBlock(
+                        message = uiState.loadError!!,
+                        onRetry = { viewModel.load() }
                     )
 
-                    StatusLine(enabled = uiState.enabled, until = uiState.until)
+                    else -> {
+                        MasterSwitch(
+                            enabled = uiState.enabled,
+                            isSaving = uiState.isSaving,
+                            onToggle = { on -> if (on) viewModel.setPreset(null) else viewModel.disable() }
+                        )
 
-                    Text(
-                        text = "Dauer",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = Slate500,
-                        fontWeight = FontWeight.Medium
-                    )
-                    PresetRow(
-                        isSaving = uiState.isSaving,
-                        onPreset = { hours -> viewModel.setPreset(hours) }
-                    )
+                        StatusLine(enabled = uiState.enabled, until = uiState.until)
 
-                    TextButton(
-                        onClick = { showDatePicker = true },
-                        enabled = !uiState.isSaving
-                    ) { Text("Zeitpunkt wählen…", color = Sky400) }
+                        Text(
+                            text = "Dauer",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Slate500,
+                            fontWeight = FontWeight.Medium
+                        )
+                        PresetRow(
+                            isSaving = uiState.isSaving,
+                            onPreset = { hours -> viewModel.setPreset(hours) }
+                        )
 
-                    Text(
-                        text = "Always-Awake hat Vorrang: solange es aktiv ist, greift keine " +
-                            "automatische Schlafautomatik und kein Zeitplan.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Slate400
-                    )
+                        TextButton(
+                            onClick = { showDatePicker = true },
+                            enabled = !uiState.isSaving
+                        ) { Text("Zeitpunkt wählen…", color = Sky400) }
+
+                        Text(
+                            text = "Always-Awake hat Vorrang: solange es aktiv ist, greift keine " +
+                                "automatische Schlafautomatik und kein Zeitplan.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate400
+                        )
+                    }
                 }
             }
         }
@@ -118,7 +132,21 @@ fun AlwaysAwakeScreen(
 
     // Date first, then time — Material3 has no combined picker.
     if (showDatePicker) {
-        val state = rememberDatePickerState()
+        // Courtesy only: the view model remains the authority on the actual
+        // window (5 minutes to ~7 days from the exact instant). This just keeps
+        // the picker from offering a day that walking through the time dialog
+        // would only end in a rejection — dates are UTC-midnight based, same as
+        // how the confirm button below reads selectedDateMillis.
+        val today = remember { LocalDate.now(ZoneOffset.UTC) }
+        val maxDate = remember(today) { today.plusDays(7) }
+        val state = rememberDatePickerState(
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val date = Instant.ofEpochMilli(utcTimeMillis).atZone(ZoneOffset.UTC).toLocalDate()
+                    return !date.isBefore(today) && !date.isAfter(maxDate)
+                }
+            }
+        )
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
@@ -182,7 +210,14 @@ private fun MasterSwitch(enabled: Boolean, isSaving: Boolean, onToggle: (Boolean
 
 @Composable
 private fun PresetRow(isSaving: Boolean, onPreset: (Long?) -> Unit) {
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    // The four buttons (M3's default 24.dp content padding each) need roughly
+    // 395dp; a 360dp-wide device leaves only ~328dp after the screen's own
+    // horizontal padding. Without a scroll, a plain Row squeezes or clips the
+    // last button — "Dauerhaft", the permanent override. Do not "tidy" this away.
+    Row(
+        modifier = Modifier.horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
         PRESETS.forEach { (label, hours) ->
             OutlinedButton(onClick = { onPreset(hours) }, enabled = !isSaving) {
                 Text(label)
@@ -204,9 +239,14 @@ private fun LoadErrorBlock(message: String, onRetry: () -> Unit) {
 private fun StatusLine(enabled: Boolean, until: Instant?) {
     var now by remember { mutableStateOf(Instant.now()) }
     LaunchedEffect(enabled, until) {
-        while (true) {
-            now = Instant.now()
-            delay(1_000)
+        // Nothing to count down when the override is off or permanent — don't
+        // wake the composition every second (including while backgrounded) for
+        // a value that would not change.
+        if (enabled && until != null) {
+            while (true) {
+                now = Instant.now()
+                delay(1_000)
+            }
         }
     }
 
@@ -223,10 +263,13 @@ private fun formatRemaining(d: Duration): String {
     val days = d.toDays()
     val hours = d.toHours() % 24
     val minutes = d.toMinutes() % 60
+    val seconds = d.seconds % 60
     return when {
         days > 0 -> "${days}d ${hours}h"
         hours > 0 -> "${hours}h ${minutes}m"
-        else -> "${minutes}m"
+        minutes > 0 -> "${minutes}m"
+        // The last minute would otherwise read "0m" for its whole 59 seconds.
+        else -> "${seconds}s"
     }
 }
 
