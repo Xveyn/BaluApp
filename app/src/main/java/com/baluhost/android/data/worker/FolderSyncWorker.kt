@@ -16,6 +16,7 @@ import com.baluhost.android.util.LocalFolderScanner
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
@@ -39,6 +40,19 @@ class FolderSyncWorker @AssistedInject constructor(
 
     private val localFolderScanner = LocalFolderScanner(appContext)
 
+    /**
+     * Reports a folder's sync status to the server so the web app can follow along.
+     *
+     * Best-effort: a failure here must not fail the sync itself. Note that
+     * [SyncRepository.updateSyncFolder] returns a [kotlin.Result] instead of throwing,
+     * so wrapping the call in try/catch would catch nothing and log nothing — the
+     * failure has to be read off the returned result.
+     */
+    private suspend fun reportStatus(folderId: String, status: SyncStatus) {
+        syncRepository.updateSyncFolder(folderId, status = status)
+            .onFailure { Log.w(TAG, "Failed to set folder status to $status", it) }
+    }
+
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         val folderId = inputData.getString(INPUT_FOLDER_ID)
             ?: return@withContext Result.failure(
@@ -51,6 +65,9 @@ class FolderSyncWorker @AssistedInject constructor(
         Log.d(TAG, "Starting sync for folder: $folderId (manual=$isManual)")
 
         serverConnectionMonitor.acquire("sync")
+
+        // Mark folder as syncing on the server so webapp can track state
+        reportStatus(folderId, SyncStatus.SYNCING)
 
         try {
             // 1. Load folder config
@@ -390,13 +407,12 @@ class FolderSyncWorker @AssistedInject constructor(
             }
 
             // 9. Update lastSync on the folder config so next sync has a correct baseline
-            if (filesUploaded > 0 || filesDownloaded > 0 || errors.isEmpty()) {
-                try {
-                    syncRepository.updateSyncFolder(folderId, status = SyncStatus.IDLE)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Failed to update folder lastSync", e)
-                }
+            val finalStatus = if (errors.isNotEmpty() && filesUploaded == 0 && filesDownloaded == 0) {
+                SyncStatus.ERROR
+            } else {
+                SyncStatus.IDLE
             }
+            reportStatus(folderId, finalStatus)
 
             // 10. Save sync history
             val duration = System.currentTimeMillis() - startTime
@@ -454,10 +470,15 @@ class FolderSyncWorker @AssistedInject constructor(
         } catch (e: kotlinx.coroutines.CancellationException) {
             // Worker was cancelled - don't retry, just fail
             Log.w(TAG, "Sync was cancelled for folder: $folderId")
+            // NonCancellable: this scope is already cancelled, so an ordinary suspend
+            // call would abort before reaching the server and leave the folder stuck
+            // at SYNCING — which is exactly what this line exists to prevent.
+            withContext(NonCancellable) { reportStatus(folderId, SyncStatus.IDLE) }
             Result.failure(workDataOf("error" to "Sync cancelled"))
         } catch (e: HttpException) {
             if (e.code() == 503) {
                 Log.w(TAG, "NAS sleeping (503) during sync of folder: $folderId")
+                reportStatus(folderId, SyncStatus.IDLE)
                 val retryAfter = e.response()?.headers()?.get("Retry-After")?.toLongOrNull()
                 syncNotificationManager.showSyncErrorNotification(
                     folderId,
@@ -470,6 +491,7 @@ class FolderSyncWorker @AssistedInject constructor(
             } else {
                 Log.e(TAG, "HTTP error during sync", e)
                 val duration = System.currentTimeMillis() - startTime
+                reportStatus(folderId, SyncStatus.ERROR)
                 syncNotificationManager.showSyncErrorNotification(
                     folderId,
                     folderId,
@@ -480,6 +502,7 @@ class FolderSyncWorker @AssistedInject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Sync failed unexpectedly", e)
             val duration = System.currentTimeMillis() - startTime
+            reportStatus(folderId, SyncStatus.ERROR)
 
             syncNotificationManager.showSyncErrorNotification(
                 folderId,
