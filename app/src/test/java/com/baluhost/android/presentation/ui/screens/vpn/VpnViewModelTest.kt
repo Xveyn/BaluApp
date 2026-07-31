@@ -41,6 +41,12 @@ class VpnViewModelTest {
     // Routing every constructed ViewModel through a ViewModelStore lets us cancel its
     // viewModelScope (via the public put()/clear() API, which invokes the package-private
     // ViewModel.clear()) before each test's runTest{} block ends.
+    //
+    // DashboardViewModel has the same shape (an infinite `while (true) { delay(30_000); ... }`
+    // loop in viewModelScope), and DashboardViewModelVpnActionTest already solves this exact
+    // hazard with its own clearViewModel() helper, which reaches ViewModel.clear() via
+    // reflection. We use ViewModelStore here instead because put()/clear() reaches the same
+    // method through public API, but it's the same underlying fix for the same problem.
     private val viewModelStore = ViewModelStore()
 
     private fun newViewModel(): VpnViewModel {
