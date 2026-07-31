@@ -47,8 +47,10 @@ this and says why in a comment — copy that shape.
 
 ### An unbounded polling loop makes `runTest` never finish
 
-`VpnViewModel` and `DashboardViewModel` both launch `while (true) { delay(n); … }`
-loops from `init` into `viewModelScope`. With `Dispatchers.setMain(testDispatcher)`
+`DashboardViewModel` launches a `while (true) { delay(n); … }` loop from `init` into
+`viewModelScope`; `VpnViewModel` launches `while (isActive) { …; delay(n) }` from its
+own `init`. Both are unbounded under `runTest`, because the test's own scope stays
+active regardless of which condition guards the loop. With `Dispatchers.setMain(testDispatcher)`
 in `@Before`, `runTest` adopts the same scheduler, so its closing "advance to
 idle" never terminates — it keeps running the loop and allocating until the heap
 is gone.
