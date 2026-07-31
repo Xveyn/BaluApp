@@ -16,8 +16,12 @@ android {
         applicationId = "com.baluhost.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // The release workflow derives both from the git tag and passes them in.
+        // Local and debug builds get the fallbacks below, so nothing changes for
+        // day-to-day work. Prefixed with "app" so they cannot collide with
+        // Gradle's own vocabulary.
+        versionCode = (findProperty("appVersionCode") as String?)?.toInt() ?: 1
+        versionName = (findProperty("appVersionName") as String?) ?: "1.0.0"
         
         testInstrumentationRunner = "com.baluhost.android.HiltTestRunner"
         

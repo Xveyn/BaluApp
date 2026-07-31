@@ -3,6 +3,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  push:
+    branches: [development]
 
 permissions:
   contents: write
@@ -26,11 +28,30 @@ jobs:
       - name: Decode google-services.json
         run: echo "${{ secrets.GOOGLE_SERVICES_JSON }}" | base64 -d > app/google-services.json
 
+      # --no-build-cache is load-bearing, not tidiness. setup-gradle restores the
+      # Gradle build cache and gradle.properties sets org.gradle.caching=true, so
+      # without it testDebugUnitTest can be served FROM-CACHE and report success
+      # without executing a single test — the worst failure mode a test job has.
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest -Dorg.gradle.jvmargs="-Xmx4g" --no-daemon
+        run: ./gradlew testDebugUnitTest --no-build-cache --no-daemon
 
+      - name: Upload test report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: app/build/reports/tests/testDebugUnitTest
+          retention-days: 7
+
+      # Catches what unit tests cannot: a broken Hilt graph, missing resources,
+      # a malformed manifest.
+      - name: Build debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      # Guarded on the event: this workflow now also runs on pushes to
+      # development, where there is no pull request to merge.
       - name: Enable auto-merge
-        if: success()
+        if: success() && github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge ${{ github.event.pull_request.number }} --auto --squash
