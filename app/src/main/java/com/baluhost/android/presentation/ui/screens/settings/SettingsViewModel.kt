@@ -12,6 +12,7 @@ import com.baluhost.android.data.local.security.BiometricAuthManager
 import com.baluhost.android.data.local.security.PinManager
 import com.baluhost.android.data.local.security.SecurePreferencesManager
 import com.baluhost.android.domain.repository.DeviceRepository
+import com.baluhost.android.domain.repository.NotificationRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,7 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val deviceRepository: DeviceRepository,
+    private val notificationRepository: NotificationRepository,
     private val preferencesManager: PreferencesManager,
     private val securePreferences: SecurePreferencesManager,
     private val biometricAuthManager: BiometricAuthManager,
@@ -200,6 +202,10 @@ class SettingsViewModel @Inject constructor(
             preferencesManager.clearAll()
             preferencesManager.saveOnboardingCompleted(false)
             securePreferences.clearAll()
+            // Notifications are per-account; leaving them would show the next
+            // account what the previous one received. Only this table - the
+            // remaining ones are BaluApp#7.
+            notificationRepository.clearAll()
 
             android.util.Log.d("SettingsViewModel", "Local data cleared, navigating to setup")
 

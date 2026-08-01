@@ -15,6 +15,7 @@ import com.google.firebase.messaging.RemoteMessage
 import com.baluhost.android.data.notification.NotificationWebSocketManager
 import com.baluhost.android.data.notification.PushNotificationStore
 import com.baluhost.android.data.remote.api.MobileApi
+import com.baluhost.android.domain.repository.NotificationRepository
 import com.baluhost.android.util.NotificationIds
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -56,6 +57,9 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject
     lateinit var pushNotificationStore: PushNotificationStore
+
+    @Inject
+    lateinit var notificationRepository: NotificationRepository
 
     override fun onCreate() {
         super.onCreate()
@@ -228,9 +232,12 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NotificationIds.DEVICE_STATUS, notificationBuilder.build())
         
-        // Clear local data (tokens, preferences)
+        // Clear local data (tokens, preferences). Notifications are per-account;
+        // leaving them would show the next account what the previous one
+        // received. Only this table - the remaining ones are BaluApp#7.
         CoroutineScope(Dispatchers.IO).launch {
             preferencesManager.clearAll()
+            notificationRepository.clearAll()
         }
         
         Log.d(TAG, "Device removed notification shown: $deviceName")

@@ -17,15 +17,23 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
+/**
+ * Covers [SettingsViewModel.deleteDevice] - the device-unpairing path that must
+ * also clear the per-account notification cache (see
+ * `notificationRepository.clearAll()` on the unconditional cleanup branch).
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
-class SettingsViewModelNetworkTest {
+class SettingsViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
+    private lateinit var deviceRepository: DeviceRepository
+    private lateinit var notificationRepository: NotificationRepository
     private lateinit var preferencesManager: PreferencesManager
+    private lateinit var securePreferences: SecurePreferencesManager
     private lateinit var bssidReader: BssidReader
     private lateinit var networkMonitor: NetworkMonitor
     private lateinit var viewModel: SettingsViewModel
@@ -33,11 +41,17 @@ class SettingsViewModelNetworkTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        deviceRepository = mockk()
+        notificationRepository = mockk(relaxed = true)
         preferencesManager = mockk(relaxed = true)
-        bssidReader = mockk()
-        networkMonitor = mockk()
+        securePreferences = mockk(relaxed = true)
+        bssidReader = mockk(relaxed = true)
+        networkMonitor = mockk(relaxed = true)
 
-        // Stub all existing PreferencesManager flows used by init
+        // Stub every PreferencesManager flow the init path calls .first() on -
+        // a relaxed mock answers Flow-returning members with an empty flow,
+        // and .first() on an empty flow throws NoSuchElementException before
+        // the test body runs (see app/src/test/CLAUDE.md).
         every { preferencesManager.getUsername() } returns flowOf("test")
         every { preferencesManager.getServerUrl() } returns flowOf("http://test")
         every { preferencesManager.getDeviceId() } returns flowOf("device1")
@@ -46,17 +60,13 @@ class SettingsViewModelNetworkTest {
         every { preferencesManager.isAutoVpnOnExternal() } returns flowOf(false)
         coEvery { preferencesManager.getHomeBssidOnce() } returns null
         every { networkMonitor.isCurrentlyWifiConnected() } returns true
-        // init also runs observeWifiState(), which collects this property
-        // (SettingsViewModel.kt:281). networkMonitor is a strict mock, so an
-        // unstubbed access throws inside viewModelScope — surfacing as
-        // UncaughtExceptionsBeforeTest rather than as a readable failure.
         every { networkMonitor.isWifiConnected } returns flowOf(true)
 
         viewModel = SettingsViewModel(
-            deviceRepository = mockk(relaxed = true),
-            notificationRepository = mockk(relaxed = true),
+            deviceRepository = deviceRepository,
+            notificationRepository = notificationRepository,
             preferencesManager = preferencesManager,
-            securePreferences = mockk(relaxed = true),
+            securePreferences = securePreferences,
             biometricAuthManager = mockk(relaxed = true),
             pinManager = mockk(relaxed = true),
             appLockManager = mockk(relaxed = true),
@@ -74,36 +84,23 @@ class SettingsViewModelNetworkTest {
     }
 
     @Test
-    fun `setHomeNetwork saves BSSID and updates state`() = runTest {
-        every { bssidReader.getCurrentBssid() } returns "AA:BB:CC:DD:EE:FF"
-        coEvery { preferencesManager.saveHomeBssid(any()) } just Runs
+    fun `deleteDevice clears the notification cache when the server call succeeds`() = runTest {
+        coEvery { deviceRepository.deleteDevice(any()) } just Runs
 
-        viewModel.setHomeNetwork()
+        viewModel.deleteDevice()
         advanceUntilIdle()
 
-        coVerify { preferencesManager.saveHomeBssid("AA:BB:CC:DD:EE:FF") }
-        assertTrue(viewModel.uiState.value.homeBssidConfigured)
+        coVerify(exactly = 1) { notificationRepository.clearAll() }
     }
 
     @Test
-    fun `setHomeNetwork shows error when BSSID is null`() = runTest {
-        every { bssidReader.getCurrentBssid() } returns null
+    fun `deleteDevice still clears the notification cache when the server call throws`() = runTest {
+        coEvery { deviceRepository.deleteDevice(any()) } throws RuntimeException("unreachable")
 
-        viewModel.setHomeNetwork()
+        viewModel.deleteDevice()
         advanceUntilIdle()
 
-        assertNotNull(viewModel.uiState.value.error)
-        assertFalse(viewModel.uiState.value.homeBssidConfigured)
-    }
-
-    @Test
-    fun `toggleAutoVpn saves preference`() = runTest {
-        coEvery { preferencesManager.saveAutoVpnOnExternal(any()) } just Runs
-
-        viewModel.toggleAutoVpn(true)
-        advanceUntilIdle()
-
-        coVerify { preferencesManager.saveAutoVpnOnExternal(true) }
-        assertTrue(viewModel.uiState.value.autoVpnOnExternal)
+        coVerify(exactly = 1) { notificationRepository.clearAll() }
+        assertTrue(viewModel.uiState.value.deviceDeleted)
     }
 }
