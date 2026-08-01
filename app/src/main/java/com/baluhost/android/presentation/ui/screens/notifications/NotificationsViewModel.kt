@@ -11,6 +11,7 @@ import com.baluhost.android.domain.usecase.notification.GetNotificationPreferenc
 import com.baluhost.android.domain.usecase.notification.ObserveNotificationsUseCase
 import com.baluhost.android.domain.usecase.notification.ObserveUnreadCountUseCase
 import com.baluhost.android.domain.usecase.notification.SyncNotificationsUseCase
+import com.baluhost.android.util.Clock
 import com.baluhost.android.util.NetworkStateManager
 import com.baluhost.android.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.Instant
 import javax.inject.Inject
 
 /**
@@ -49,7 +51,8 @@ class NotificationsViewModel @Inject constructor(
     private val getNotificationPreferencesUseCase: GetNotificationPreferencesUseCase,
     private val notificationRepository: NotificationRepository,
     private val preferencesManager: PreferencesManager,
-    private val networkStateManager: NetworkStateManager
+    private val networkStateManager: NetworkStateManager,
+    private val clock: Clock
 ) : ViewModel() {
 
     enum class Tab { INBOX, TRASH }
@@ -102,11 +105,16 @@ class NotificationsViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .flatMapLatest { filter ->
                     observeNotificationsUseCase(trashed = filter.tab == Tab.TRASH).map { list ->
+                        val now = clock.now()
                         list.filter { notification ->
                             (filter.category == null ||
                                 notification.rawCategory.equals(filter.category.name, ignoreCase = true)) &&
                                 (filter.type == null || notification.type == filter.type) &&
-                                (!filter.unreadOnly || !notification.isRead)
+                                (!filter.unreadOnly || !notification.isRead) &&
+                                // A snooze still in effect hides the row from the inbox; the trash
+                                // tab is unaffected because every row it observes already has
+                                // deletedAt set (see NotificationDao.observe's trashed condition).
+                                (notification.deletedAt != null || !isSnoozedIntoFuture(notification, now))
                         }
                     }
                 }
@@ -278,6 +286,22 @@ class NotificationsViewModel @Inject constructor(
             }
             is Result.Loading -> Unit
         }
+    }
+
+    /**
+     * Whether [notification]'s snooze is still in effect at [now]. Filtered here, where
+     * the flow is collected, rather than in `NotificationDao`'s query: the DAO is the one
+     * part of this feature plain JUnit cannot exercise at all (no `androidTest` source
+     * set), so time semantics belong in plain Kotlin the ViewModel test can pin with an
+     * injected [Clock] instead. The trade-off is the same either way and is accepted: a
+     * `Flow` bound to a "now" parameter does not re-emit purely because time passed, so an
+     * expired snooze only reappears on the next value the underlying cache flow produces
+     * (a sync, another local write, tab/filter change) - not automatically the instant it
+     * expires.
+     */
+    private fun isSnoozedIntoFuture(notification: AppNotification, now: Instant): Boolean {
+        val snoozedUntil = notification.snoozedUntil ?: return false
+        return runCatching { Instant.parse(snoozedUntil) }.getOrNull()?.isAfter(now) == true
     }
 
     private data class FilterState(

@@ -11,6 +11,7 @@ import com.baluhost.android.domain.usecase.notification.GetNotificationPreferenc
 import com.baluhost.android.domain.usecase.notification.ObserveNotificationsUseCase
 import com.baluhost.android.domain.usecase.notification.ObserveUnreadCountUseCase
 import com.baluhost.android.domain.usecase.notification.SyncNotificationsUseCase
+import com.baluhost.android.util.Clock
 import com.baluhost.android.util.NetworkStateManager
 import com.baluhost.android.util.Result
 import io.mockk.coEvery
@@ -31,6 +32,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import java.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class NotificationsViewModelTest {
@@ -45,12 +47,17 @@ class NotificationsViewModelTest {
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var networkStateManager: NetworkStateManager
 
+    // Fixed instant so "snoozed into the future" boundary cases don't race the wall clock.
+    private val fixedNow = Instant.parse("2026-08-01T12:00:00Z")
+    private val clock = Clock { fixedNow }
+
     private fun notification(
         id: Int,
         rawCategory: String = "raid",
         type: NotificationType = NotificationType.INFO,
         isRead: Boolean = false,
-        deletedAt: String? = null
+        deletedAt: String? = null,
+        snoozedUntil: String? = null
     ) = AppNotification(
         id = id,
         createdAt = "2026-08-01T12:00:00Z",
@@ -67,7 +74,7 @@ class NotificationsViewModelTest {
         priority = 0,
         metadata = null,
         timeAgo = null,
-        snoozedUntil = null
+        snoozedUntil = snoozedUntil
     )
 
     @Before
@@ -106,7 +113,8 @@ class NotificationsViewModelTest {
         getNotificationPreferencesUseCase = getNotificationPreferencesUseCase,
         notificationRepository = notificationRepository,
         preferencesManager = preferencesManager,
-        networkStateManager = networkStateManager
+        networkStateManager = networkStateManager,
+        clock = clock
     )
 
     @Test
@@ -218,6 +226,50 @@ class NotificationsViewModelTest {
 
         val vm = createViewModel()
         vm.setTypeFilter(NotificationType.CRITICAL)
+
+        assertEquals(listOf(1), vm.uiState.value.notifications.map { it.id })
+    }
+
+    @Test
+    fun `a notification snoozed into the future is absent from the inbox list`() = runTest {
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(
+            listOf(notification(1, snoozedUntil = "2026-08-01T13:00:00Z")) // one hour after fixedNow
+        )
+
+        val vm = createViewModel()
+
+        assertTrue(vm.uiState.value.notifications.isEmpty())
+    }
+
+    @Test
+    fun `a notification with a past snoozedUntil or none is present in the inbox list`() = runTest {
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(
+            listOf(
+                notification(1, snoozedUntil = "2026-08-01T11:00:00Z"), // one hour before fixedNow
+                notification(2, snoozedUntil = null)
+            )
+        )
+
+        val vm = createViewModel()
+
+        assertEquals(listOf(1, 2), vm.uiState.value.notifications.map { it.id })
+    }
+
+    @Test
+    fun `a snoozed notification that is also trashed still appears in the trash tab`() = runTest {
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(emptyList())
+        every { observeNotificationsUseCase(trashed = true) } returns flowOf(
+            listOf(
+                notification(
+                    1,
+                    deletedAt = "2026-08-01T11:55:00Z",
+                    snoozedUntil = "2026-08-01T13:00:00Z" // still in the future, but trash is unaffected
+                )
+            )
+        )
+
+        val vm = createViewModel()
+        vm.setTab(NotificationsViewModel.Tab.TRASH)
 
         assertEquals(listOf(1), vm.uiState.value.notifications.map { it.id })
     }

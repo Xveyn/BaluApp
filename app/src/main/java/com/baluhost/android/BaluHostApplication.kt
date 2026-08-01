@@ -54,8 +54,11 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
         super.onCreate()
 
         // A push may have landed while the app was dead. Reconciling here keeps the
-        // badge honest before the user opens anything.
-        CoroutineScope(Dispatchers.IO).launch { syncNotificationsUseCase() }
+        // badge honest before the user opens anything. SyncNotificationsUseCase already
+        // reports failure instead of throwing, but nothing on this path can react to an
+        // exception anyway, so runCatching is a second line of defense against a crash
+        // at app start.
+        CoroutineScope(Dispatchers.IO).launch { runCatching { syncNotificationsUseCase() } }
 
         // Schedule offline queue background workers
         OfflineQueueWorkScheduler.schedulePeriodicRetry(this)
