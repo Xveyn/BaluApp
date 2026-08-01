@@ -40,6 +40,15 @@ class GamingModeUseCaseTest {
         menuItems = listOf(
             PluginMenuItemDto(id = "gaming_mode"),
             PluginMenuItemDto(id = "gaming_mode_end")
+        ),
+        translations = mapOf(
+            "de" to mapOf(
+                "menu_gaming_mode_started" to "Gaming-Modus gestartet",
+                "menu_steam_failed" to "Displays sind an, aber Steam startete nicht",
+                "menu_gaming_mode_ended" to "Gaming-Modus beendet",
+                "menu_end_steam_not_running" to "Steam läuft nicht - nichts zu beenden",
+                "menu_end_game_running" to "Es läuft noch ein Spiel"
+            )
         )
     )
 
@@ -182,5 +191,96 @@ class GamingModeUseCaseTest {
         val result = StartGamingModeUseCase(pluginApi, cache)()
 
         assertEquals("Gaming-Modus nicht verfügbar", (result as Result.Error).exception.message)
+    }
+
+    @Test
+    fun `ending the gaming mode returns the German plugin string`() = runTest {
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
+        GetGamingModeActionsUseCase(pluginApi, cache)()
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
+            PluginMenuActionResultDto(
+                ok = true,
+                messageKey = "menu_gaming_mode_ended",
+                messageText = "Gaming mode ended"
+            )
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals("Gaming-Modus beendet", (result as Result.Success).data)
+    }
+
+    @Test
+    fun `a running game blocks the end action and is reported as an error`() = runTest {
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
+        GetGamingModeActionsUseCase(pluginApi, cache)()
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
+            PluginMenuActionResultDto(
+                ok = false,
+                messageKey = "menu_end_game_running",
+                messageText = "A game is still running: Factorio"
+            )
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals("Es läuft noch ein Spiel", (result as Result.Error).exception.message)
+    }
+
+    @Test
+    fun `Steam not running is a no-op, not a failure`() = runTest {
+        // Der Server meldet diesen Fall mit ok=true. Er darf nicht als Fehler
+        // beim Nutzer landen — es gibt schlicht nichts zu beenden.
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
+        GetGamingModeActionsUseCase(pluginApi, cache)()
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
+            PluginMenuActionResultDto(
+                ok = true,
+                messageKey = "menu_end_steam_not_running",
+                messageText = "Steam is not running - nothing to end"
+            )
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals("Steam läuft nicht - nichts zu beenden", (result as Result.Success).data)
+    }
+
+    @Test
+    fun `the end action falls back to message_text when the key was never translated`() = runTest {
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
+            PluginMenuActionResultDto(
+                ok = false,
+                messageKey = "menu_end_windows_failed",
+                messageText = "Big Picture was closed, but the windows stayed up"
+            )
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals(
+            "Big Picture was closed, but the windows stayed up",
+            (result as Result.Error).exception.message
+        )
+    }
+
+    @Test
+    fun `a 403 on the end action is reported as it being unavailable`() = runTest {
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } throws HttpException(
+            Response.error<Any>(403, "".toResponseBody("application/json".toMediaTypeOrNull()))
+        )
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals(
+            "Gaming-Modus beenden nicht verfügbar",
+            (result as Result.Error).exception.message
+        )
+    }
+
+    @Test
+    fun `an unreachable server is reported as such for the end action`() = runTest {
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } throws
+            java.io.IOException("connect timed out")
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals("Server nicht erreichbar", (result as Result.Error).exception.message)
     }
 }
