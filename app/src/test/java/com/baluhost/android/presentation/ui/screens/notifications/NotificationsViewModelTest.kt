@@ -168,6 +168,17 @@ class NotificationsViewModelTest {
         }
 
     @Test
+    fun `hasLoadedOnce becomes true after the first cache emission, even an empty one`() = runTest {
+        // Deliberately the default (empty) stub from setup(): a genuinely empty cache
+        // must still flip hasLoadedOnce, since the screen's empty-state gate relies on
+        // this being "have I heard from the cache flow", not "is the list non-empty".
+        val vm = createViewModel()
+
+        assertTrue(vm.uiState.value.hasLoadedOnce)
+        assertTrue(vm.uiState.value.notifications.isEmpty())
+    }
+
+    @Test
     fun `switching to the trash tab observes the trashed flow`() = runTest {
         every { observeNotificationsUseCase(trashed = false) } returns flowOf(listOf(notification(1)))
         every { observeNotificationsUseCase(trashed = true) } returns flowOf(listOf(notification(2)))
@@ -210,9 +221,49 @@ class NotificationsViewModelTest {
         )
 
         val vm = createViewModel()
-        vm.setCategory(NotificationCategory.RAID)
+        // setCategory takes the raw string now, not the closed NotificationCategory enum -
+        // this exercises the live path; the enum can't express every category the server
+        // can send (see the next test), so a call site that still passed the enum here
+        // would no longer compile and would be testing dead code.
+        vm.setCategory("raid")
 
         assertEquals(listOf(1), vm.uiState.value.notifications.map { it.id })
+    }
+
+    @Test
+    fun `a plugin-contributed rawCategory is filterable`() = runTest {
+        // "steam_gaming" has no corresponding NotificationCategory entry - it would
+        // display-map to SYSTEM (see domain/model/CLAUDE.md) - but filtering compares
+        // rawCategory directly, so it must still be selectable and match exactly its
+        // own notifications, not everything that falls back to SYSTEM.
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(
+            listOf(
+                notification(1, rawCategory = "steam_gaming"),
+                notification(2, rawCategory = "lifecycle"),
+                notification(3, rawCategory = "raid")
+            )
+        )
+
+        val vm = createViewModel()
+        vm.setCategory("steam_gaming")
+
+        assertEquals(listOf(1), vm.uiState.value.notifications.map { it.id })
+    }
+
+    @Test
+    fun `availableCategories reflects the tab's full list, not the currently filtered one`() = runTest {
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(
+            listOf(notification(1, rawCategory = "raid"), notification(2, rawCategory = "smart"))
+        )
+
+        val vm = createViewModel()
+        assertEquals(listOf("raid", "smart"), vm.uiState.value.availableCategories)
+
+        // Narrowing by type must not shrink the category chip set out from under
+        // whatever the user currently has selected.
+        vm.setTypeFilter(NotificationType.CRITICAL)
+
+        assertEquals(listOf("raid", "smart"), vm.uiState.value.availableCategories)
     }
 
     @Test
@@ -339,6 +390,23 @@ class NotificationsViewModelTest {
 
         coVerify(exactly = 1) { notificationRepository.dismissLocally(3, 1) }
         coVerify(exactly = 1) { notificationRepository.dismissLocally(3, 2) }
+    }
+
+    @Test
+    fun `dismissAll only dismisses notifications matching the active category filter`() = runTest {
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(
+            listOf(notification(1, rawCategory = "raid"), notification(2, rawCategory = "smart"))
+        )
+        val vm = createViewModel()
+        vm.setCategory("raid")
+
+        vm.dismissAll()
+
+        // "currently shown" (see markAllAsRead's and dismissAll's KDoc) means what the
+        // active filters leave visible, not every row the tab happens to have - id 2 is
+        // filtered out by category and must be left alone.
+        coVerify(exactly = 1) { notificationRepository.dismissLocally(3, 1) }
+        coVerify(exactly = 0) { notificationRepository.dismissLocally(3, 2) }
     }
 
     @Test

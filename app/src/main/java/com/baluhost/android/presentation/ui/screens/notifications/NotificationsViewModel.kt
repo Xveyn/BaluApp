@@ -4,7 +4,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.model.AppNotification
-import com.baluhost.android.domain.model.NotificationCategory
 import com.baluhost.android.domain.model.NotificationType
 import com.baluhost.android.domain.repository.NotificationRepository
 import com.baluhost.android.domain.usecase.notification.GetNotificationPreferencesUseCase
@@ -61,7 +60,18 @@ class NotificationsViewModel @Inject constructor(
         val notifications: List<AppNotification> = emptyList(),
         val isLoading: Boolean = false,
         val isRefreshing: Boolean = false,
-        val selectedCategory: NotificationCategory? = null,
+        // Raw server category string, not the closed NotificationCategory enum: the
+        // server's category set is open (core categories, "lifecycle", plugin names),
+        // and filtering through the enum would make anything outside its 8 values
+        // unreachable. See NotificationCategory's doc comment on AppNotification.category
+        // (domain/model/Notification.kt) and the corresponding entry in domain/model/CLAUDE.md.
+        val selectedCategory: String? = null,
+        // Distinct rawCategory values present in the current tab, unfiltered by
+        // selectedCategory/typeFilter/unreadOnly - this is what the category chip
+        // row is built from, so narrowing by type or unread-only never makes the
+        // currently selected category chip (and its filter) disappear out from
+        // under the user. See observeFilteredNotifications.
+        val availableCategories: List<String> = emptyList(),
         val typeFilter: NotificationType? = null,
         val unreadOnly: Boolean = false,
         // No server-side pagination anymore: the cache flow always delivers the
@@ -69,7 +79,15 @@ class NotificationsViewModel @Inject constructor(
         val hasMore: Boolean = false,
         val tab: Tab = Tab.INBOX,
         val isOffline: Boolean = false,
-        val retentionDays: Int = 7
+        val retentionDays: Int = 7,
+        // True once observeFilteredNotifications has delivered at least one real
+        // emission (of either tab, whether that first list is empty or not) since
+        // this ViewModel was constructed. Never reset back to false - the ViewModel
+        // outlives screen recompositions (rotation, navigating to Preferences and
+        // back), so a screen that reads this directly from uiState, instead of
+        // tracking its own local "have I seen an update yet" flag, gets the right
+        // answer immediately on every recomposition instead of only on the first one.
+        val hasLoadedOnce: Boolean = false
     )
 
     private val _uiState = MutableStateFlow(UiState())
@@ -85,7 +103,7 @@ class NotificationsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     private val _tab = MutableStateFlow(Tab.INBOX)
-    private val _selectedCategory = MutableStateFlow<NotificationCategory?>(null)
+    private val _selectedCategory = MutableStateFlow<String?>(null)
     private val _typeFilter = MutableStateFlow<NotificationType?>(null)
     private val _unreadOnly = MutableStateFlow(false)
 
@@ -106,20 +124,45 @@ class NotificationsViewModel @Inject constructor(
                 .flatMapLatest { filter ->
                     observeNotificationsUseCase(trashed = filter.tab == Tab.TRASH).map { list ->
                         val now = clock.now()
-                        list.filter { notification ->
-                            (filter.category == null ||
-                                notification.rawCategory.equals(filter.category.name, ignoreCase = true)) &&
-                                (filter.type == null || notification.type == filter.type) &&
-                                (!filter.unreadOnly || !notification.isRead) &&
-                                // A snooze still in effect hides the row from the inbox; the trash
-                                // tab is unaffected because every row it observes already has
-                                // deletedAt set (see NotificationDao.observe's trashed condition).
-                                (notification.deletedAt != null || !isSnoozedIntoFuture(notification, now))
+                        // Tab-scoped and snooze-resolved, but not yet narrowed by
+                        // category/type/unread: availableCategories is deliberately
+                        // derived from this list, not from `filtered` below, so the
+                        // category chip row doesn't shrink out from under the user
+                        // as they narrow by type or unread-only (see UiState.availableCategories).
+                        val visible = list.filter { notification ->
+                            // A snooze still in effect hides the row from the inbox; the trash
+                            // tab is unaffected because every row it observes already has
+                            // deletedAt set (see NotificationDao.observe's trashed condition).
+                            notification.deletedAt != null || !isSnoozedIntoFuture(notification, now)
                         }
+                        val filtered = visible.filter { notification ->
+                            (filter.category == null ||
+                                notification.rawCategory.equals(filter.category, ignoreCase = true)) &&
+                                (filter.type == null || notification.type == filter.type) &&
+                                (!filter.unreadOnly || !notification.isRead)
+                        }
+                        FilteredNotifications(
+                            filtered = filtered,
+                            availableCategories = visible.map { it.rawCategory }.distinct().sorted()
+                        )
                     }
                 }
-                .collect { filtered ->
-                    _uiState.update { it.copy(notifications = filtered) }
+                .collect { result ->
+                    _uiState.update {
+                        it.copy(
+                            notifications = result.filtered,
+                            availableCategories = result.availableCategories,
+                            // Monotonic: this is "has the cache flow ever delivered a real
+                            // list", not "is the current list non-empty" - flips once, on
+                            // the very first emission of either tab, and never resets. A
+                            // screen reading this straight from uiState (instead of racing
+                            // its own drop(1)-on-a-fresh-subscription flag) gets the right
+                            // answer immediately even when it recomposes long after this
+                            // ViewModel already settled - see the Fix round 1 note on the
+                            // Critical finding in task-10-report.md for why that mattered.
+                            hasLoadedOnce = true
+                        )
+                    }
                 }
         }
     }
@@ -171,7 +214,12 @@ class NotificationsViewModel @Inject constructor(
         }
     }
 
-    /** No-op: the observed cache flow always delivers the full list, kept only so the screen still compiles. */
+    /**
+     * No-op. Server-side pagination doesn't exist anymore: [observeFilteredNotifications]'s
+     * cache flow always delivers the full (filtered) list for the current tab in one shot,
+     * so there is nothing to load more of. Kept as a stable, harmless entry point - deleting
+     * it is a separate call from fixing its comment, and nothing here decides that on its own.
+     */
     fun loadMore() = Unit
 
     fun setTab(tab: Tab) {
@@ -179,7 +227,11 @@ class NotificationsViewModel @Inject constructor(
         _uiState.update { it.copy(tab = tab) }
     }
 
-    fun setCategory(category: NotificationCategory?) {
+    /**
+     * @param category Raw server category string (e.g. "raid", "lifecycle", a plugin
+     * name), not the closed NotificationCategory enum - see [UiState.selectedCategory].
+     */
+    fun setCategory(category: String?) {
         _selectedCategory.value = category
         _uiState.update { it.copy(selectedCategory = category) }
     }
@@ -306,8 +358,13 @@ class NotificationsViewModel @Inject constructor(
 
     private data class FilterState(
         val tab: Tab,
-        val category: NotificationCategory?,
+        val category: String?,
         val type: NotificationType?,
         val unreadOnly: Boolean
+    )
+
+    private data class FilteredNotifications(
+        val filtered: List<AppNotification>,
+        val availableCategories: List<String>
     )
 }

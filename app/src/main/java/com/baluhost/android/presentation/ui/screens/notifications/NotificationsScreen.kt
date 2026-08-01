@@ -30,8 +30,6 @@ import com.baluhost.android.presentation.ui.components.BaluBackground
 import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.theme.*
-import kotlinx.coroutines.flow.drop
-import kotlinx.coroutines.flow.first
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -45,19 +43,6 @@ fun NotificationsScreen(
     val listState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // The cache-backed UiState no longer has a real isLoading flag (it's hardcoded
-    // false - see UiState's doc comment on hasMore), so the very first composition
-    // still holds the ViewModel's pristine default UiState(), whose empty
-    // notification list is indistinguishable from "genuinely empty". Wait for one
-    // real update beyond whatever the flow's value already is at subscription time
-    // before ever trusting an empty list - this is what keeps the empty state from
-    // flashing for an instant on every screen open.
-    var hasSettled by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        viewModel.uiState.drop(1).first()
-        hasSettled = true
-    }
-
     // Snackbar events are only emitted for user-triggered actions (restore, delete
     // permanently, empty trash, dismiss all) - see NotificationsViewModel.snackbarEvent.
     LaunchedEffect(Unit) {
@@ -66,23 +51,8 @@ fun NotificationsScreen(
         }
     }
 
-    var selectedRawCategory by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(uiState.tab) { selectedRawCategory = null }
-
     var showDismissAllDialog by remember { mutableStateOf(false) }
     var showEmptyTrashDialog by remember { mutableStateOf(false) }
-
-    val displayedNotifications = remember(uiState.notifications, selectedRawCategory) {
-        val category = selectedRawCategory
-        if (category == null) {
-            uiState.notifications
-        } else {
-            uiState.notifications.filter { it.rawCategory.equals(category, ignoreCase = true) }
-        }
-    }
-    val availableCategories = remember(uiState.notifications) {
-        uiState.notifications.map { it.rawCategory }.distinct().sorted()
-    }
 
     Scaffold(
         topBar = {
@@ -216,18 +186,19 @@ fun NotificationsScreen(
                 ) {
                     item {
                         FilterChip(
-                            selected = selectedRawCategory == null,
-                            onClick = { selectedRawCategory = null },
+                            selected = uiState.selectedCategory == null,
+                            onClick = { viewModel.setCategory(null) },
                             label = { Text("Alle") },
-                            colors = filterChipColors(selectedRawCategory == null)
+                            colors = filterChipColors(uiState.selectedCategory == null)
                         )
                     }
-                    items(availableCategories) { rawCategory ->
+                    items(uiState.availableCategories) { rawCategory ->
                         FilterChip(
-                            selected = selectedRawCategory == rawCategory,
+                            selected = uiState.selectedCategory == rawCategory,
                             onClick = {
-                                selectedRawCategory =
-                                    if (selectedRawCategory == rawCategory) null else rawCategory
+                                viewModel.setCategory(
+                                    if (uiState.selectedCategory == rawCategory) null else rawCategory
+                                )
                             },
                             label = { Text(rawCategoryLabel(rawCategory)) },
                             leadingIcon = {
@@ -237,7 +208,7 @@ fun NotificationsScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                             },
-                            colors = filterChipColors(selectedRawCategory == rawCategory)
+                            colors = filterChipColors(uiState.selectedCategory == rawCategory)
                         )
                     }
                     item {
@@ -302,10 +273,15 @@ fun NotificationsScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     when {
-                        // Nothing settled yet, or a sync is still filling an
-                        // empty list: show an indeterminate spinner rather than
-                        // guessing at an empty state.
-                        !hasSettled || (displayedNotifications.isEmpty() && uiState.isRefreshing) -> {
+                        // uiState.hasLoadedOnce is the ViewModel's own "have I ever
+                        // delivered a real list" flag (see its doc comment) - reading
+                        // it straight from uiState, instead of a screen-local flag
+                        // racing a fresh subscription, means a populated list is never
+                        // hidden behind a spinner just because the screen itself was
+                        // freshly recomposed (rotation, navigating to Preferences and
+                        // back): the moment the list is non-empty, this branch is false
+                        // regardless of hasLoadedOnce.
+                        !uiState.hasLoadedOnce && uiState.notifications.isEmpty() -> {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
@@ -313,7 +289,18 @@ fun NotificationsScreen(
                                 CircularProgressIndicator(color = Sky400)
                             }
                         }
-                        displayedNotifications.isEmpty() -> {
+                        // A sync is still filling an empty list: show the spinner
+                        // rather than "no notifications" for the moment before the
+                        // first real batch lands.
+                        uiState.notifications.isEmpty() && uiState.isRefreshing -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Sky400)
+                            }
+                        }
+                        uiState.notifications.isEmpty() -> {
                             Box(
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
@@ -347,7 +334,7 @@ fun NotificationsScreen(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 items(
-                                    items = displayedNotifications,
+                                    items = uiState.notifications,
                                     key = { it.id }
                                 ) { notification ->
                                     NotificationCard(
