@@ -11,8 +11,10 @@ import com.baluhost.android.domain.usecase.notification.*
 import com.baluhost.android.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -23,7 +25,8 @@ class NotificationsViewModel @Inject constructor(
     private val markAllReadUseCase: MarkAllReadUseCase,
     private val dismissNotificationUseCase: DismissNotificationUseCase,
     private val snoozeNotificationUseCase: SnoozeNotificationUseCase,
-    private val webSocketManager: NotificationWebSocketManager
+    private val webSocketManager: NotificationWebSocketManager,
+    private val observeUnreadCountUseCase: ObserveUnreadCountUseCase
 ) : ViewModel() {
 
     data class UiState(
@@ -41,7 +44,8 @@ class NotificationsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(UiState())
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
 
-    val unreadCount: StateFlow<Int> = webSocketManager.unreadCount
+    val unreadCount: StateFlow<Int> = observeUnreadCountUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     init {
         loadNotifications()

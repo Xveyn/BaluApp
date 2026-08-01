@@ -43,16 +43,8 @@ class NotificationWebSocketManager @Inject constructor(
     private val _connected = MutableStateFlow(false)
     val connected: StateFlow<Boolean> = _connected.asStateFlow()
 
-    private val _unreadCount = MutableStateFlow(0)
-    val unreadCount: StateFlow<Int> = _unreadCount.asStateFlow()
-
     private val _latestNotification = MutableSharedFlow<NotificationDto>(extraBufferCapacity = 10)
     val latestNotification: SharedFlow<NotificationDto> = _latestNotification.asSharedFlow()
-
-    /** Increment unread count from external sources (e.g. FCM push). */
-    fun incrementUnreadCount() {
-        _unreadCount.value += 1
-    }
 
     /** Cache a live notification. Internal so the socket listener and tests share one path. */
     suspend fun persist(dto: NotificationDto) {
@@ -130,10 +122,6 @@ class NotificationWebSocketManager @Inject constructor(
                 val payload = json.getAsJsonObject("payload")
 
                 when (type) {
-                    "unread_count" -> {
-                        val count = payload?.get("count")?.asInt ?: 0
-                        _unreadCount.value = count
-                    }
                     "notification" -> {
                         payload?.let {
                             val notification = gson.fromJson(it, NotificationDto::class.java)

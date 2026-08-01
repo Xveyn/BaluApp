@@ -8,6 +8,7 @@ import com.baluhost.android.domain.model.DesktopActionResult
 import com.baluhost.android.domain.model.DesktopState
 import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
+import com.baluhost.android.domain.usecase.notification.ObserveUnreadCountUseCase
 import com.baluhost.android.domain.usecase.plugin.EndGamingModeUseCase
 import com.baluhost.android.domain.usecase.plugin.GetGamingModeActionsUseCase
 import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
@@ -25,7 +26,6 @@ import io.mockk.mockk
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -44,6 +44,7 @@ class DashboardViewModelDesktopActionTest {
     private val testDispatcher = UnconfinedTestDispatcher()
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var notificationWebSocketManager: NotificationWebSocketManager
+    private lateinit var observeUnreadCountUseCase: ObserveUnreadCountUseCase
     private lateinit var getDesktopStatusUseCase: GetDesktopStatusUseCase
     private lateinit var enableDesktopUseCase: EnableDesktopUseCase
     private lateinit var disableDesktopUseCase: DisableDesktopUseCase
@@ -58,6 +59,7 @@ class DashboardViewModelDesktopActionTest {
         Dispatchers.setMain(testDispatcher)
         preferencesManager = mockk(relaxed = true)
         notificationWebSocketManager = mockk(relaxed = true)
+        observeUnreadCountUseCase = mockk()
         getDesktopStatusUseCase = mockk()
         enableDesktopUseCase = mockk()
         disableDesktopUseCase = mockk()
@@ -73,7 +75,7 @@ class DashboardViewModelDesktopActionTest {
         every { preferencesManager.getDeviceId() } returns flowOf("device1")
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
         every { preferencesManager.isAutoVpnOnExternal() } returns flowOf(false)
-        every { notificationWebSocketManager.unreadCount } returns MutableStateFlow(0)
+        every { observeUnreadCountUseCase() } returns flowOf(0)
 
         coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.UNKNOWN)
         coEvery { getGamingModeActionsUseCase() } returns GetGamingModeActionsUseCase.GamingModeActions()
@@ -115,6 +117,7 @@ class DashboardViewModelDesktopActionTest {
             offlineQueueRepository = mockk(relaxed = true),
             syncRepository = mockk(relaxed = true),
             notificationWebSocketManager = notificationWebSocketManager,
+            observeUnreadCountUseCase = observeUnreadCountUseCase,
             sendWolUseCase = mockk(relaxed = true),
             sendSoftSleepUseCase = mockk(relaxed = true),
             sendSuspendUseCase = mockk(relaxed = true),
