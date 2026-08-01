@@ -40,4 +40,24 @@ interface NotificationsApi {
 
     @POST("notifications/ws-token")
     suspend fun getWsToken(): WsTokenResponse
+
+    @GET("notifications/trash")
+    suspend fun getTrash(
+        @Query("category") category: String? = null,
+        @Query("notification_type") notificationType: String? = null,
+        @Query("page") page: Int = 1,
+        @Query("page_size") pageSize: Int = 50
+    ): NotificationListResponse
+
+    @POST("notifications/{id}/restore")
+    suspend fun restore(@Path("id") id: Int): NotificationDto
+
+    @POST("notifications/dismiss-all")
+    suspend fun dismissAll(): MarkReadResponse
+
+    @DELETE("notifications/{id}")
+    suspend fun deletePermanently(@Path("id") id: Int)
+
+    @DELETE("notifications/trash")
+    suspend fun emptyTrash()
 }
