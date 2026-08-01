@@ -8,6 +8,7 @@ import com.baluhost.android.domain.model.DesktopActionResult
 import com.baluhost.android.domain.model.DesktopState
 import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
+import com.baluhost.android.domain.usecase.plugin.EndGamingModeUseCase
 import com.baluhost.android.domain.usecase.plugin.GetGamingModeActionsUseCase
 import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
 import com.baluhost.android.domain.model.PowerPermissions
@@ -48,6 +49,7 @@ class DashboardViewModelDesktopActionTest {
     private lateinit var disableDesktopUseCase: DisableDesktopUseCase
     private lateinit var getGamingModeActionsUseCase: GetGamingModeActionsUseCase
     private lateinit var startGamingModeUseCase: StartGamingModeUseCase
+    private lateinit var endGamingModeUseCase: EndGamingModeUseCase
     private lateinit var getMyPowerPermissionsUseCase: GetMyPowerPermissionsUseCase
     private lateinit var checkNasStatusUseCase: CheckNasStatusUseCase
 
@@ -61,6 +63,7 @@ class DashboardViewModelDesktopActionTest {
         disableDesktopUseCase = mockk()
         getGamingModeActionsUseCase = mockk()
         startGamingModeUseCase = mockk()
+        endGamingModeUseCase = mockk()
         getMyPowerPermissionsUseCase = mockk()
         checkNasStatusUseCase = mockk()
 
@@ -122,7 +125,8 @@ class DashboardViewModelDesktopActionTest {
             enableDesktopUseCase = enableDesktopUseCase,
             disableDesktopUseCase = disableDesktopUseCase,
             getGamingModeActionsUseCase = getGamingModeActionsUseCase,
-            startGamingModeUseCase = startGamingModeUseCase
+            startGamingModeUseCase = startGamingModeUseCase,
+            endGamingModeUseCase = endGamingModeUseCase
         )
     }
 
@@ -370,6 +374,126 @@ class DashboardViewModelDesktopActionTest {
             assertEquals("Displays sind an, aber Steam startete nicht", awaitItem())
         }
         assertEquals(DesktopState.UNKNOWN, vm.desktopState.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `onPowerDialogOpened offers the end entry when the server advertises that direction`() = runTest {
+        // Der Normalfall bei laufendem Gaming-Modus: der Server nennt genau
+        // die Beenden-Richtung, die Start-Richtung verschwindet.
+        coEvery { getGamingModeActionsUseCase() } returns
+            GetGamingModeActionsUseCase.GamingModeActions(canStart = false, canEnd = true)
+        val vm = createViewModel()
+
+        vm.onPowerDialogOpened()
+
+        assertFalse(vm.gamingModeAvailable.value)
+        assertTrue(vm.gamingModeEndAvailable.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `a server that advertises only the start action leaves the end entry hidden`() = runTest {
+        coEvery { getGamingModeActionsUseCase() } returns
+            GetGamingModeActionsUseCase.GamingModeActions(canStart = true, canEnd = false)
+        val vm = createViewModel()
+
+        vm.onPowerDialogOpened()
+
+        assertTrue(vm.gamingModeAvailable.value)
+        assertFalse(vm.gamingModeEndAvailable.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `a second dialog opening takes the flipped direction from the server`() = runTest {
+        // Der Zustand kippt durch die Aktion selbst: nach einem erfolgreichen
+        // Start setzt der Server seinen Merker, das Manifest zeigt danach die
+        // andere Richtung. Weil onPowerDialogOpened() bei jedem Öffnen neu
+        // fragt, muss ein zuvor gesetztes Flag auch wieder zurückfallen —
+        // sonst stünden nach einigen Klicks beide Einträge im Dialog.
+        coEvery { getGamingModeActionsUseCase() } returns
+            GetGamingModeActionsUseCase.GamingModeActions(canStart = true, canEnd = false)
+        val vm = createViewModel()
+        vm.onPowerDialogOpened()
+        assertTrue(vm.gamingModeAvailable.value)
+
+        coEvery { getGamingModeActionsUseCase() } returns
+            GetGamingModeActionsUseCase.GamingModeActions(canStart = false, canEnd = true)
+
+        vm.onPowerDialogOpened()
+
+        assertFalse(vm.gamingModeAvailable.value)
+        assertTrue(vm.gamingModeEndAvailable.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `onPowerDialogOpened hides the end entry for a non-admin`() = runTest {
+        every { preferencesManager.getUserRole() } returns flowOf("user")
+        val vm = createViewModel()
+
+        vm.onPowerDialogOpened()
+
+        coVerify(exactly = 0) { getGamingModeActionsUseCase() }
+        assertFalse(vm.gamingModeEndAvailable.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `endGamingMode passes the plugin message on`() = runTest {
+        coEvery { endGamingModeUseCase() } returns Result.Success("Gaming-Modus beendet")
+        val vm = createViewModel()
+
+        vm.snackbarEvent.test {
+            vm.endGamingMode()
+
+            assertEquals("Gaming-Modus beendet", awaitItem())
+            expectNoEvents()
+        }
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `endGamingMode leaves the desktop state untouched`() = runTest {
+        // Die Beenden-Action fasst die Displays nicht an — anders als
+        // startGamingMode() darf sie den bekannten Zustand also weder auf
+        // RUNNING setzen noch auf UNKNOWN zurückwerfen. RUNNING wird vorher
+        // gesetzt, damit die Assertion eine Nicht-Änderung beweist und nicht
+        // bloß den UNKNOWN-Default trifft.
+        coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.RUNNING)
+        val vm = createViewModel()
+        vm.onPowerDialogOpened()
+        assertEquals(DesktopState.RUNNING, vm.desktopState.value)
+
+        coEvery { endGamingModeUseCase() } returns Result.Success("Gaming-Modus beendet")
+
+        vm.snackbarEvent.test {
+            vm.endGamingMode()
+            awaitItem()
+        }
+
+        assertEquals(DesktopState.RUNNING, vm.desktopState.value)
+        clearViewModel(vm)
+    }
+
+    @Test
+    fun `a refused endGamingMode reports the plugin message and keeps the desktop state`() = runTest {
+        coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.RUNNING)
+        val vm = createViewModel()
+        vm.onPowerDialogOpened()
+        assertEquals(DesktopState.RUNNING, vm.desktopState.value)
+
+        coEvery { endGamingModeUseCase() } returns
+            Result.Error(Exception("Es läuft noch ein Spiel"))
+
+        vm.snackbarEvent.test {
+            vm.endGamingMode()
+
+            assertEquals("Es läuft noch ein Spiel", awaitItem())
+        }
+        // Auch der Fehlschlag sagt nichts über die Displays aus.
+        assertEquals(DesktopState.RUNNING, vm.desktopState.value)
         clearViewModel(vm)
     }
 }

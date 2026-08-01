@@ -31,6 +31,7 @@ import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.domain.model.DesktopState
+import com.baluhost.android.domain.usecase.plugin.EndGamingModeUseCase
 import com.baluhost.android.domain.usecase.plugin.GetGamingModeActionsUseCase
 import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
@@ -85,7 +86,8 @@ class DashboardViewModel @Inject constructor(
     private val enableDesktopUseCase: EnableDesktopUseCase,
     private val disableDesktopUseCase: DisableDesktopUseCase,
     private val getGamingModeActionsUseCase: GetGamingModeActionsUseCase,
-    private val startGamingModeUseCase: StartGamingModeUseCase
+    private val startGamingModeUseCase: StartGamingModeUseCase,
+    private val endGamingModeUseCase: EndGamingModeUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(DashboardUiState())
@@ -126,6 +128,9 @@ class DashboardViewModel @Inject constructor(
 
     private val _gamingModeAvailable = MutableStateFlow(false)
     val gamingModeAvailable: StateFlow<Boolean> = _gamingModeAvailable.asStateFlow()
+
+    private val _gamingModeEndAvailable = MutableStateFlow(false)
+    val gamingModeEndAvailable: StateFlow<Boolean> = _gamingModeEndAvailable.asStateFlow()
 
     private val _snackbarEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val snackbarEvent: SharedFlow<String> = _snackbarEvent.asSharedFlow()
@@ -591,16 +596,19 @@ class DashboardViewModel @Inject constructor(
                 }
                 else -> {}
             }
-            // gamingModeAvailable means "may be shown" — it is set explicitly in
-            // both branches so a non-admin's `false` is a decision, not a value
-            // left stale by omission. The plugin menu-action route is
-            // admin-only server-side, so asking on anyone else's behalf could
-            // only ever produce a 403; non-admins simply never get to see it.
-            _gamingModeAvailable.value = if (_isAdmin.value) {
-                getGamingModeActionsUseCase().canStart
+            // gamingModeAvailable/gamingModeEndAvailable heißen "darf gezeigt
+            // werden" — beide werden in beiden Zweigen explizit gesetzt, damit
+            // ein false bei Nicht-Admins eine Entscheidung ist und kein durch
+            // Auslassen stehengebliebener Wert. Die Plugin-Menü-Route ist
+            // serverseitig admin-only, für andere könnte die Frage nur ein 403
+            // ergeben. Ein Aufruf beantwortet beide Einträge.
+            val gamingActions = if (_isAdmin.value) {
+                getGamingModeActionsUseCase()
             } else {
-                false
+                GetGamingModeActionsUseCase.GamingModeActions()
             }
+            _gamingModeAvailable.value = gamingActions.canStart
+            _gamingModeEndAvailable.value = gamingActions.canEnd
         }
     }
 
@@ -692,6 +700,25 @@ class DashboardViewModel @Inject constructor(
                         result.exception.message ?: "Gaming-Modus fehlgeschlagen"
                     )
                 }
+                else -> {}
+            }
+            _powerActionInProgress.value = false
+        }
+    }
+
+    fun endGamingMode() {
+        viewModelScope.launch {
+            _powerActionInProgress.value = true
+            when (val result = endGamingModeUseCase()) {
+                // desktopState bleibt in beiden Zweigen unangetastet: die Action
+                // fasst die Displays nicht an, weil "Displays aus" ein eigener
+                // Menüpunkt ist. Anders als bei startGamingMode() ist der zuvor
+                // bekannte Zustand danach also weiterhin wahr — sowohl bei
+                // Erfolg als auch bei jedem der vier Fehlerfälle.
+                is Result.Success -> _snackbarEvent.emit(result.data)
+                is Result.Error -> _snackbarEvent.emit(
+                    result.exception.message ?: "Gaming-Modus beenden fehlgeschlagen"
+                )
                 else -> {}
             }
             _powerActionInProgress.value = false
