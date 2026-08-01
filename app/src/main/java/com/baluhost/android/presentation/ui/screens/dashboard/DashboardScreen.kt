@@ -1135,25 +1135,26 @@ private fun ServerStatusStrip(
                                     }
                                 )
                             }
-                            // Eigenes Flag, kein when() über einen selbst
-                            // geführten Zustand: welche Richtung gerade gilt,
-                            // entscheidet seit BaluHost PR #500 der Server
-                            // (Merker-Datei × Display-Zählung) und nennt genau
-                            // eine davon im Manifest. Ob Big Picture läuft, ist
-                            // von außen nicht messbar — die App könnte es also
-                            // gar nicht nachrechnen und liest deshalb bloß ab.
-                            // Zwei unabhängige Blöcke statt eines Umschalters
-                            // halten sie zusätzlich gegen einen Serverstand
-                            // zwischen #497 und #500 korrekt, der beide nennt.
-                            // Kein Bestätigungsdialog — der Server bricht von
-                            // sich aus ab, wenn ein Spiel läuft, und lässt die
-                            // Displays unangetastet.
+                            // Its own flag, not a when() over self-tracked
+                            // state: which direction currently holds has been
+                            // decided by the server since BaluHost PR #500 (a
+                            // marker file × display count) and it names
+                            // exactly one of them in the manifest. Whether Big
+                            // Picture is running cannot be measured from
+                            // outside — the app could not recompute it
+                            // anyway, so it just reads what the server says.
+                            // Two independent blocks instead of one toggle
+                            // also keep this correct against a server state
+                            // between #497 and #500, which names both. No
+                            // confirmation dialog — the server itself aborts
+                            // when a game is running, leaving the displays
+                            // untouched.
                             if (gamingModeEndAvailable) {
                                 PowerOptionButton(
                                     icon = Icons.Default.Monitor,
                                     label = "Gaming-Modus beenden",
                                     description = "Big Picture schließen + Fenster minimieren",
-                                    color = Sky400,
+                                    color = Violet500,
                                     onClick = {
                                         showPowerDialog = false
                                         onEndGamingMode()

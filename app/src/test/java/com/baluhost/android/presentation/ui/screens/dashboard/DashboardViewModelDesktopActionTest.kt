@@ -379,8 +379,8 @@ class DashboardViewModelDesktopActionTest {
 
     @Test
     fun `onPowerDialogOpened offers the end entry when the server advertises that direction`() = runTest {
-        // Der Normalfall bei laufendem Gaming-Modus: der Server nennt genau
-        // die Beenden-Richtung, die Start-Richtung verschwindet.
+        // The normal case while gaming mode is running: the server names
+        // exactly the end direction, the start direction disappears.
         coEvery { getGamingModeActionsUseCase() } returns
             GetGamingModeActionsUseCase.GamingModeActions(canStart = false, canEnd = true)
         val vm = createViewModel()
@@ -407,11 +407,11 @@ class DashboardViewModelDesktopActionTest {
 
     @Test
     fun `a second dialog opening takes the flipped direction from the server`() = runTest {
-        // Der Zustand kippt durch die Aktion selbst: nach einem erfolgreichen
-        // Start setzt der Server seinen Merker, das Manifest zeigt danach die
-        // andere Richtung. Weil onPowerDialogOpened() bei jedem Öffnen neu
-        // fragt, muss ein zuvor gesetztes Flag auch wieder zurückfallen —
-        // sonst stünden nach einigen Klicks beide Einträge im Dialog.
+        // The state flips through the action itself: after a successful
+        // start, the server sets its marker, and the manifest then shows the
+        // other direction. Because onPowerDialogOpened() asks again on every
+        // opening, a previously set flag must also fall back — otherwise
+        // both entries would end up in the dialog after a few clicks.
         coEvery { getGamingModeActionsUseCase() } returns
             GetGamingModeActionsUseCase.GamingModeActions(canStart = true, canEnd = false)
         val vm = createViewModel()
@@ -456,11 +456,11 @@ class DashboardViewModelDesktopActionTest {
 
     @Test
     fun `endGamingMode leaves the desktop state untouched`() = runTest {
-        // Die Beenden-Action fasst die Displays nicht an — anders als
-        // startGamingMode() darf sie den bekannten Zustand also weder auf
-        // RUNNING setzen noch auf UNKNOWN zurückwerfen. RUNNING wird vorher
-        // gesetzt, damit die Assertion eine Nicht-Änderung beweist und nicht
-        // bloß den UNKNOWN-Default trifft.
+        // The end action does not touch the displays — unlike
+        // startGamingMode(), it must therefore neither set the known state
+        // to RUNNING nor fall it back to UNKNOWN. RUNNING is seeded up front
+        // so the assertion proves a non-change instead of merely matching
+        // the UNKNOWN default.
         coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.RUNNING)
         val vm = createViewModel()
         vm.onPowerDialogOpened()
@@ -492,7 +492,7 @@ class DashboardViewModelDesktopActionTest {
 
             assertEquals("Es läuft noch ein Spiel", awaitItem())
         }
-        // Auch der Fehlschlag sagt nichts über die Displays aus.
+        // The failure, too, says nothing about the displays.
         assertEquals(DesktopState.RUNNING, vm.desktopState.value)
         clearViewModel(vm)
     }

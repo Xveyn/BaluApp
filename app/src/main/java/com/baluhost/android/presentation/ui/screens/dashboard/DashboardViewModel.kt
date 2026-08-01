@@ -596,12 +596,13 @@ class DashboardViewModel @Inject constructor(
                 }
                 else -> {}
             }
-            // gamingModeAvailable/gamingModeEndAvailable heißen "darf gezeigt
-            // werden" — beide werden in beiden Zweigen explizit gesetzt, damit
-            // ein false bei Nicht-Admins eine Entscheidung ist und kein durch
-            // Auslassen stehengebliebener Wert. Die Plugin-Menü-Route ist
-            // serverseitig admin-only, für andere könnte die Frage nur ein 403
-            // ergeben. Ein Aufruf beantwortet beide Einträge.
+            // gamingModeAvailable/gamingModeEndAvailable mean "may be shown" —
+            // both are set explicitly in both branches so a non-admin's
+            // `false` is a decision, not a value left stale by omission. The
+            // plugin menu-action route is admin-only server-side, so asking
+            // on anyone else's behalf could only ever produce a 403;
+            // non-admins simply never get to see either entry. One call
+            // answers both entries.
             val gamingActions = if (_isAdmin.value) {
                 getGamingModeActionsUseCase()
             } else {
@@ -710,11 +711,11 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _powerActionInProgress.value = true
             when (val result = endGamingModeUseCase()) {
-                // desktopState bleibt in beiden Zweigen unangetastet: die Action
-                // fasst die Displays nicht an, weil "Displays aus" ein eigener
-                // Menüpunkt ist. Anders als bei startGamingMode() ist der zuvor
-                // bekannte Zustand danach also weiterhin wahr — sowohl bei
-                // Erfolg als auch bei jedem der vier Fehlerfälle.
+                // desktopState stays untouched in both branches: the action
+                // does not touch the displays, because "displays off" is its
+                // own menu entry. Unlike startGamingMode(), the previously
+                // known state therefore remains true afterwards — both on
+                // success and on each of the three error cases.
                 is Result.Success -> _snackbarEvent.emit(result.data)
                 is Result.Error -> _snackbarEvent.emit(
                     result.exception.message ?: "Gaming-Modus beenden fehlgeschlagen"

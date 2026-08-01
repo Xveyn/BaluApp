@@ -814,10 +814,10 @@ Beobachtungen notieren; sie gehören zu denselben offenen Gerätetests wie der S
 
 In `app/src/main/java/com/baluhost/android/domain/usecase/CLAUDE.md`:
 
-- Gesamtzahlen: `55 files total: 54 across ten subdirectories` → `57 files total: 56 across ten subdirectories`, und im selben Absatz `plus one top-level orchestrator` unverändert lassen.
-- Der Absatz „**Bypassing the repository is common…**" nennt „Of the 55 files, roughly half" → auf `57` anpassen.
+- Gesamtzahlen: `55 files total: 54 across ten subdirectories` → `56 files total: 55 across ten subdirectories`, und im selben Absatz `plus one top-level orchestrator` unverändert lassen.
+- Der Absatz „**Bypassing the repository is common…**" nennt „Of the 55 files, roughly half" → auf `56` anpassen.
 - Die Tabellenzeile `| plugin/ | 3 | Gaming-mode plugin availability check and launch, plus shared constants | PluginApi directly (2 use cases); GamingMode.kt is a constants object, not a use case |` ersetzen durch:
-  `| plugin/ | 5 | Gaming-mode action discovery, launch and end, plus shared constants | PluginApi directly (3 use cases); GamingMode.kt is a constants object, not a use case |`
+  `| plugin/ | 4 | Gaming-mode action discovery, launch and end, plus shared constants | PluginApi directly (3 use cases); GamingMode.kt is a constants object, not a use case |`
 - Der Stichpunkt „**`IsGamingModeAvailableUseCase` returns `Boolean`, not `Result<Boolean>`, and swallows every exception.**" beschreibt eine Datei, die es nicht mehr gibt. Ersetzen durch:
 
 ```markdown
@@ -825,7 +825,7 @@ In `app/src/main/java/com/baluhost/android/domain/usecase/CLAUDE.md`:
 ```
 
 - Der Absatz „**`plugin/`'s specific precedent is `system/GetEnergyDashboardUseCase`…**" nennt `IsGamingModeAvailableUseCase`/`StartGamingModeUseCase` — auf `GetGamingModeActionsUseCase`/`StartGamingModeUseCase`/`EndGamingModeUseCase` erweitern und „these three call sites" auf „these four call sites" korrigieren.
-- Der Stichpunkt „**`plugin/GamingMode.kt`** … counting toward that directory's 3 files" → `5 files`.
+- Der Stichpunkt „**`plugin/GamingMode.kt`** … counting toward that directory's 3 files" → `4 files`.
 
 `presentation/ui/CLAUDE.md` braucht keine Änderung: die Zeile zum `dashboard/`-Verzeichnis nennt „power actions (wake/sleep/suspend, desktop enable/disable, gaming mode)" und bleibt zutreffend.
 

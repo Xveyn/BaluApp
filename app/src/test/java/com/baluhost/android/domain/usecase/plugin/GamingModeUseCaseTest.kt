@@ -47,7 +47,9 @@ class GamingModeUseCaseTest {
                 "menu_steam_failed" to "Displays sind an, aber Steam startete nicht",
                 "menu_gaming_mode_ended" to "Gaming-Modus beendet",
                 "menu_end_steam_not_running" to "Steam läuft nicht - nichts zu beenden",
-                "menu_end_game_running" to "Es läuft noch ein Spiel"
+                "menu_end_game_running" to "Es läuft noch ein Spiel",
+                "menu_end_close_failed" to "Big Picture konnte nicht geschlossen werden",
+                "menu_end_windows_failed" to "Big Picture ist zu, aber die Fenster blieben offen"
             )
         )
     )
@@ -67,8 +69,8 @@ class GamingModeUseCaseTest {
 
     @Test
     fun `the end action alone is offered when the manifest names only it`() = runTest {
-        // Der Normalfall gegen einen Server ab BaluHost PR #500: das Manifest
-        // nennt genau eine Richtung, hier die Beenden-Richtung.
+        // The normal case against a server from BaluHost PR #500 onward: the
+        // manifest names exactly one direction, here the end direction.
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(
             listOf(steamPlugin.copy(menuItems = listOf(PluginMenuItemDto(id = "gaming_mode_end"))))
         )
@@ -81,9 +83,9 @@ class GamingModeUseCaseTest {
 
     @Test
     fun `both actions are read off as-is when the manifest names both`() = runTest {
-        // Kein aktueller Server tut das, ein Stand zwischen #497 und #500 schon.
-        // Der UseCase liest ab, was dasteht, statt eine Exklusivität zu
-        // erzwingen, die er nicht prüfen kann.
+        // No current server does this, but a state between #497 and #500
+        // does. The use case reads off what is there instead of enforcing an
+        // exclusivity it has no way to check.
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
 
         val actions = GetGamingModeActionsUseCase(pluginApi, cache)()
@@ -94,8 +96,8 @@ class GamingModeUseCaseTest {
 
     @Test
     fun `the end action is not offered while the manifest only has the start action`() = runTest {
-        // Ein Server vor PR #497 liefert genau das, ein Server ab #500 immer
-        // dann, wenn der Gaming-Modus gerade nicht läuft.
+        // A server before PR #497 delivers exactly this, and a server from
+        // #500 onward does too whenever gaming mode is not currently running.
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(steamPlugin))
 
         assertFalse(GetGamingModeActionsUseCase(pluginApi, cache)().canEnd)
@@ -226,9 +228,28 @@ class GamingModeUseCaseTest {
     }
 
     @Test
+    fun `a close failure is reported with the German plugin string`() = runTest {
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
+        GetGamingModeActionsUseCase(pluginApi, cache)()
+        coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
+            PluginMenuActionResultDto(
+                ok = false,
+                messageKey = "menu_end_close_failed",
+                messageText = "Big Picture could not be closed"
+            )
+
+        val result = EndGamingModeUseCase(pluginApi, cache)()
+
+        assertEquals(
+            "Big Picture konnte nicht geschlossen werden",
+            (result as Result.Error).exception.message
+        )
+    }
+
+    @Test
     fun `Steam not running is a no-op, not a failure`() = runTest {
-        // Der Server meldet diesen Fall mit ok=true. Er darf nicht als Fehler
-        // beim Nutzer landen — es gibt schlicht nichts zu beenden.
+        // The server reports this case with ok=true. It must not reach the
+        // user as an error — there is simply nothing to end.
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
         GetGamingModeActionsUseCase(pluginApi, cache)()
         coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
@@ -245,10 +266,16 @@ class GamingModeUseCaseTest {
 
     @Test
     fun `the end action falls back to message_text when the key was never translated`() = runTest {
+        // Populate the cache first, the way the neighbouring tests do, so
+        // this proves "populated cache, unknown key ⇒ fallback" rather than
+        // just "empty cache ⇒ fallback" — an implementation looking up the
+        // wrong plugin name would pass against an empty cache too.
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
+        GetGamingModeActionsUseCase(pluginApi, cache)()
         coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode_end") } returns
             PluginMenuActionResultDto(
                 ok = false,
-                messageKey = "menu_end_windows_failed",
+                messageKey = "menu_end_unknown_key",
                 messageText = "Big Picture was closed, but the windows stayed up"
             )
 
