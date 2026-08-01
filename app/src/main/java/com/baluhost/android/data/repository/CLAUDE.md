@@ -8,6 +8,7 @@ A repository method calls the relevant `*Api`, maps the DTO to a domain model, a
 
 This is the dominant pattern, not a universal one — know the exceptions before assuming a method follows it:
 - `FileRepository.getFiles()` and `OfflineQueueRepositoryImpl.getPendingOperations()/getPendingCount()` return `Flow<T>` directly, not `Result<T>` — these are continuous cache reads, not one-shot calls, so there's no single outcome to wrap.
+- `NotificationRepositoryImpl.observeNotifications()/observeUnreadCount()` likewise return `Flow<T>` directly — cache-first reads off `NotificationDao`, backing the local notification table that `sync()` reconciles with the server. Both map the observed rows in Kotlin rather than answering from SQL: `observeUnreadCount()` counts what the inbox actually shows (unread, not trashed, and *not snoozed into the future*), and `observeNotifications()` derives each row's displayed age from `createdAt`. Both need a "now", and there is no `androidTest` source set, so the time-dependent half deliberately lives where plain JUnit can reach it — the injected `Clock`, not a query parameter.
 - `DeviceRepositoryImpl.deleteDevice()` throws instead of returning `Result` — see `domain/repository/DeviceRepository.kt`'s `@throws Exception` contract. Callers need a `try/catch`, not a `when`.
 - `PowerRepositoryImpl.checkNasStatus()` returns the custom sealed type `NasStatusResult`, not `Result<T>`, because a Fritz!Box check has outcomes (`FritzBoxNotConfigured`, `FritzBoxAuthError`, `FritzBoxUnreachable`, `Resolved(NasStatus)`) that don't fit the generic success/error shape.
 - `VpnRepositoryImpl.getCachedVpnConfig()` returns `VpnConfig?` directly — a local cache read, same reasoning as the `Flow` cases above.
@@ -30,7 +31,7 @@ This is the dominant pattern, not a universal one — know the exceptions before
 | `FileRepository.kt` | Cache-first file listing (Room + `FilesApi`), not interface-bound (see above) |
 | `FilesRepositoryImpl.kt` | `FilesRepository` implementation: file/folder CRUD, permissions |
 | `MonitoringRepositoryImpl.kt` | CPU/memory history, energy dashboard, uptime current + history |
-| `NotificationRepositoryImpl.kt` | Notification list, unread count, read/dismiss/snooze, preferences |
+| `NotificationRepositoryImpl.kt` | Notification list, unread count, read/dismiss/snooze, trash/restore/empty, preferences, and `sync()` — the cache↔server reconcile: it pages both list endpoints, pushes every pending local decision, and stores the state the server reports *after* those pushes (see the file's own comments) |
 | `OfflineQueueRepositoryImpl.kt` | Room-backed queue of operations pending sync while offline |
 | `PowerRepositoryImpl.kt` | Wake-on-LAN, soft sleep/suspend/wake, desktop enable/disable, NAS status check |
 | `SleepConfigRepositoryImpl.kt` | Always-awake override (get/set) |

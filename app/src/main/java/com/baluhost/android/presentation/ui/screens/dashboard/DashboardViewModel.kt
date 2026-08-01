@@ -20,6 +20,7 @@ import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.usecase.activity.GetRecentFilesUseCase
 import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
+import com.baluhost.android.domain.usecase.notification.ObserveUnreadCountUseCase
 import com.baluhost.android.domain.usecase.system.GetCurrentUptimeUseCase
 import com.baluhost.android.domain.usecase.system.GetEnergyDashboardUseCase
 import com.baluhost.android.domain.usecase.system.GetRaidStatusUseCase
@@ -49,11 +50,13 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -76,6 +79,7 @@ class DashboardViewModel @Inject constructor(
     private val offlineQueueRepository: OfflineQueueRepository,
     private val syncRepository: SyncRepository,
     private val notificationWebSocketManager: NotificationWebSocketManager,
+    private val observeUnreadCountUseCase: ObserveUnreadCountUseCase,
     private val sendWolUseCase: SendWolUseCase,
     private val sendSoftSleepUseCase: SendSoftSleepUseCase,
     private val sendSuspendUseCase: SendSuspendUseCase,
@@ -93,7 +97,8 @@ class DashboardViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(DashboardUiState())
     val uiState: StateFlow<DashboardUiState> = _uiState.asStateFlow()
 
-    val unreadNotificationCount: StateFlow<Int> = notificationWebSocketManager.unreadCount
+    val unreadNotificationCount: StateFlow<Int> = observeUnreadCountUseCase()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
     
     // VPN-related state flows
     private val _isInHomeNetwork = MutableStateFlow<Boolean?>(null)

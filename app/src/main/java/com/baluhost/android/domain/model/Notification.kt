@@ -11,12 +11,16 @@ data class AppNotification(
     val createdAt: String,
     val userId: Int?,
     val type: NotificationType,
+    /** Raw server category. Open set: core categories, "lifecycle", plugin names. */
+    val rawCategory: String,
+    /** Display-only mapping of [rawCategory]; unknown values fall back to SYSTEM. */
     val category: NotificationCategory,
     val title: String,
     val message: String,
     val actionUrl: String?,
     val isRead: Boolean,
-    val isDismissed: Boolean,
+    /** Server timestamp of the move to trash; null means active. */
+    val deletedAt: String?,
     val priority: Int,
     val metadata: Map<String, Any>?,
     val timeAgo: String?,
@@ -30,6 +34,7 @@ fun NotificationDto.toDomain() = AppNotification(
     type = NotificationType.entries.find {
         it.name.equals(notificationType, ignoreCase = true)
     } ?: NotificationType.INFO,
+    rawCategory = category,
     category = NotificationCategory.entries.find {
         it.name.equals(category, ignoreCase = true)
     } ?: NotificationCategory.SYSTEM,
@@ -37,7 +42,7 @@ fun NotificationDto.toDomain() = AppNotification(
     message = message,
     actionUrl = actionUrl,
     isRead = isRead,
-    isDismissed = isDismissed,
+    deletedAt = deletedAt,
     priority = priority,
     metadata = metadata,
     timeAgo = timeAgo,

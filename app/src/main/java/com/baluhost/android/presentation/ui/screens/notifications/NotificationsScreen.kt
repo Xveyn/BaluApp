@@ -22,7 +22,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.domain.model.AppNotification
 import com.baluhost.android.domain.model.NotificationCategory
@@ -42,19 +41,18 @@ fun NotificationsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val unreadCount by viewModel.unreadCount.collectAsState()
     val listState = rememberLazyListState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
-    // Load more when near end of list
-    val shouldLoadMore = remember {
-        derivedStateOf {
-            val lastVisibleItem = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisibleItem >= listState.layoutInfo.totalItemsCount - 3
+    // Snackbar events are only emitted for user-triggered actions (restore, delete
+    // permanently, empty trash, dismiss all) - see NotificationsViewModel.snackbarEvent.
+    LaunchedEffect(Unit) {
+        viewModel.snackbarEvent.collect { message ->
+            snackbarHostState.showSnackbar(message)
         }
     }
-    LaunchedEffect(shouldLoadMore.value) {
-        if (shouldLoadMore.value && uiState.hasMore && !uiState.isLoading) {
-            viewModel.loadMore()
-        }
-    }
+
+    var showDismissAllDialog by remember { mutableStateOf(false) }
+    var showEmptyTrashDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -104,11 +102,42 @@ fun NotificationsScreen(
                             )
                         }
                     }
+                    if (uiState.notifications.isNotEmpty()) {
+                        when (uiState.tab) {
+                            NotificationsViewModel.Tab.INBOX -> {
+                                IconButton(onClick = { showDismissAllDialog = true }) {
+                                    Icon(
+                                        Icons.Default.ClearAll,
+                                        contentDescription = "Alle wegklicken",
+                                        tint = Slate400
+                                    )
+                                }
+                            }
+                            NotificationsViewModel.Tab.TRASH -> {
+                                IconButton(onClick = { showEmptyTrashDialog = true }) {
+                                    Icon(
+                                        Icons.Default.DeleteSweep,
+                                        contentDescription = "Papierkorb leeren",
+                                        tint = Slate400
+                                    )
+                                }
+                            }
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent
                 )
             )
+        },
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    containerColor = Slate800,
+                    contentColor = Color.White,
+                    snackbarData = data
+                )
+            }
         },
         containerColor = Color.Transparent
     ) { paddingValues ->
@@ -118,7 +147,39 @@ fun NotificationsScreen(
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                // Filter Chips
+                // Inbox / Trash tabs
+                TabRow(
+                    selectedTabIndex = uiState.tab.ordinal,
+                    containerColor = Color.Transparent,
+                    contentColor = Sky400
+                ) {
+                    Tab(
+                        selected = uiState.tab == NotificationsViewModel.Tab.INBOX,
+                        onClick = { viewModel.setTab(NotificationsViewModel.Tab.INBOX) },
+                        text = { Text("Posteingang") },
+                        selectedContentColor = Sky400,
+                        unselectedContentColor = Slate400
+                    )
+                    Tab(
+                        selected = uiState.tab == NotificationsViewModel.Tab.TRASH,
+                        onClick = { viewModel.setTab(NotificationsViewModel.Tab.TRASH) },
+                        text = { Text("Papierkorb") },
+                        selectedContentColor = Sky400,
+                        unselectedContentColor = Slate400
+                    )
+                }
+
+                if (uiState.tab == NotificationsViewModel.Tab.TRASH) {
+                    Text(
+                        "Einträge werden nach ${uiState.retentionDays} Tagen endgültig gelöscht",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                    )
+                }
+
+                // Filter Chips: category (raw string - see rawCategoryLabel/-Icon),
+                // type, and unread-only
                 LazyRow(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -131,45 +192,77 @@ fun NotificationsScreen(
                             colors = filterChipColors(uiState.selectedCategory == null)
                         )
                     }
-                    items(NotificationCategory.entries.toList()) { category ->
+                    items(uiState.availableCategories) { rawCategory ->
                         FilterChip(
-                            selected = uiState.selectedCategory == category,
-                            onClick = { viewModel.setCategory(category) },
-                            label = { Text(categoryLabel(category)) },
+                            selected = uiState.selectedCategory == rawCategory,
+                            onClick = {
+                                viewModel.setCategory(
+                                    if (uiState.selectedCategory == rawCategory) null else rawCategory
+                                )
+                            },
+                            label = { Text(rawCategoryLabel(rawCategory)) },
                             leadingIcon = {
                                 Icon(
-                                    categoryIcon(category),
+                                    rawCategoryIcon(rawCategory),
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
                             },
-                            colors = filterChipColors(uiState.selectedCategory == category)
+                            colors = filterChipColors(uiState.selectedCategory == rawCategory)
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.typeFilter == NotificationType.INFO,
+                            onClick = {
+                                viewModel.setTypeFilter(
+                                    if (uiState.typeFilter == NotificationType.INFO) null else NotificationType.INFO
+                                )
+                            },
+                            label = { Text("Info") },
+                            colors = filterChipColors(uiState.typeFilter == NotificationType.INFO)
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.typeFilter == NotificationType.WARNING,
+                            onClick = {
+                                viewModel.setTypeFilter(
+                                    if (uiState.typeFilter == NotificationType.WARNING) null else NotificationType.WARNING
+                                )
+                            },
+                            label = { Text("Warnung") },
+                            colors = filterChipColors(uiState.typeFilter == NotificationType.WARNING)
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.typeFilter == NotificationType.CRITICAL,
+                            onClick = {
+                                viewModel.setTypeFilter(
+                                    if (uiState.typeFilter == NotificationType.CRITICAL) null else NotificationType.CRITICAL
+                                )
+                            },
+                            label = { Text("Kritisch") },
+                            colors = filterChipColors(uiState.typeFilter == NotificationType.CRITICAL)
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = uiState.unreadOnly,
+                            onClick = { viewModel.toggleUnreadOnly() },
+                            label = { Text("Nur ungelesen") },
+                            colors = filterChipColors(uiState.unreadOnly)
                         )
                     }
                 }
 
-                // Unread Only Toggle
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                if (uiState.isOffline) {
                     Text(
-                        "Nur ungelesene",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Slate400
-                    )
-                    Switch(
-                        checked = uiState.unreadOnly,
-                        onCheckedChange = { viewModel.toggleUnreadOnly() },
-                        colors = SwitchDefaults.colors(
-                            checkedThumbColor = Sky400,
-                            checkedTrackColor = Slate800,
-                            uncheckedThumbColor = Slate400,
-                            uncheckedTrackColor = Slate800
-                        )
+                        "Offline – zuletzt bekannter Stand",
+                        color = Orange500,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
                     )
                 }
 
@@ -179,96 +272,168 @@ fun NotificationsScreen(
                     onRefresh = { viewModel.refresh() },
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (uiState.notifications.isEmpty() && !uiState.isLoading) {
-                        // Empty State
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    when {
+                        // uiState.hasLoadedOnce is the ViewModel's own "have I ever
+                        // delivered a real list" flag (see its doc comment) - reading
+                        // it straight from uiState, instead of a screen-local flag
+                        // racing a fresh subscription, means a populated list is never
+                        // hidden behind a spinner just because the screen itself was
+                        // freshly recomposed (rotation, navigating to Preferences and
+                        // back): the moment the list is non-empty, this branch is false
+                        // regardless of hasLoadedOnce.
+                        !uiState.hasLoadedOnce && uiState.notifications.isEmpty() -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    Icons.Default.NotificationsNone,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(64.dp),
-                                    tint = Slate400.copy(alpha = 0.5f)
-                                )
-                                Text(
-                                    "Keine Benachrichtigungen",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = Slate400
-                                )
+                                CircularProgressIndicator(color = Sky400)
                             }
                         }
-                    } else {
-                        LazyColumn(
-                            state = listState,
-                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(
-                                items = uiState.notifications,
-                                key = { it.id }
-                            ) { notification ->
-                                NotificationCard(
-                                    notification = notification,
-                                    onMarkRead = { viewModel.markAsRead(notification.id) },
-                                    onDismiss = { viewModel.dismiss(notification.id) },
-                                    onSnooze = { viewModel.snooze(notification.id) }
-                                )
+                        // A sync is still filling an empty list: show the spinner
+                        // rather than "no notifications" for the moment before the
+                        // first real batch lands.
+                        uiState.notifications.isEmpty() && uiState.isRefreshing -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = Sky400)
                             }
-
-                            if (uiState.isLoading && uiState.notifications.isNotEmpty()) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CircularProgressIndicator(
-                                            color = Sky400,
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.dp
-                                        )
-                                    }
+                        }
+                        uiState.notifications.isEmpty() -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.NotificationsNone,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = Slate400.copy(alpha = 0.5f)
+                                    )
+                                    Text(
+                                        if (uiState.tab == NotificationsViewModel.Tab.TRASH) {
+                                            "Papierkorb ist leer"
+                                        } else {
+                                            "Keine Benachrichtigungen"
+                                        },
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = Slate400
+                                    )
                                 }
                             }
                         }
-                    }
-
-                    // Initial loading
-                    if (uiState.isLoading && uiState.notifications.isEmpty()) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = Sky400)
+                        else -> {
+                            LazyColumn(
+                                state = listState,
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(
+                                    items = uiState.notifications,
+                                    key = { it.id }
+                                ) { notification ->
+                                    NotificationCard(
+                                        notification = notification,
+                                        tab = uiState.tab,
+                                        onMarkRead = { viewModel.markAsRead(notification.id) },
+                                        onDismiss = { viewModel.dismiss(notification.id) },
+                                        onSnooze = { viewModel.snooze(notification.id) },
+                                        onRestore = { viewModel.restore(notification.id) },
+                                        onDeletePermanently = { viewModel.deletePermanently(notification.id) }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     }
+
+    if (showDismissAllDialog) {
+        AlertDialog(
+            onDismissRequest = { showDismissAllDialog = false },
+            containerColor = Slate900,
+            title = { Text("Alle wegklicken?", color = Color.White) },
+            text = {
+                Text(
+                    "Alle Benachrichtigungen im Posteingang werden in den Papierkorb verschoben. " +
+                        "Das betrifft mehrere Einträge auf einmal.",
+                    color = Slate300
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDismissAllDialog = false
+                    viewModel.dismissAll()
+                }) {
+                    Text("Wegklicken", color = Red400)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDismissAllDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            }
+        )
+    }
+
+    if (showEmptyTrashDialog) {
+        AlertDialog(
+            onDismissRequest = { showEmptyTrashDialog = false },
+            containerColor = Slate900,
+            title = { Text("Papierkorb leeren?", color = Color.White) },
+            text = {
+                Text(
+                    "Alle Einträge im Papierkorb werden endgültig gelöscht. " +
+                        "Das kann nicht rückgängig gemacht werden.",
+                    color = Slate300
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showEmptyTrashDialog = false
+                    viewModel.emptyTrash()
+                }) {
+                    Text("Leeren", color = Red400)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEmptyTrashDialog = false }) {
+                    Text("Abbrechen", color = Slate400)
+                }
+            }
+        )
+    }
 }
 
 @Composable
 private fun NotificationCard(
     notification: AppNotification,
+    tab: NotificationsViewModel.Tab,
     onMarkRead: () -> Unit,
     onDismiss: () -> Unit,
-    onSnooze: () -> Unit
+    onSnooze: () -> Unit,
+    onRestore: () -> Unit,
+    onDeletePermanently: () -> Unit
 ) {
     var showMenu by remember { mutableStateOf(false) }
+    val isTrash = tab == NotificationsViewModel.Tab.TRASH
+    val onCardClick: (() -> Unit)? = if (isTrash) {
+        null
+    } else {
+        { if (!notification.isRead) onMarkRead() }
+    }
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
         intensity = GlassIntensity.Medium,
-        onClick = {
-            if (!notification.isRead) onMarkRead()
-        }
+        onClick = onCardClick
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -284,7 +449,7 @@ private fun NotificationCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = categoryIcon(notification.category),
+                        imageVector = rawCategoryIcon(notification.rawCategory),
                         contentDescription = null,
                         tint = typeColor(notification.type),
                         modifier = Modifier.size(20.dp)
@@ -371,38 +536,61 @@ private fun NotificationCard(
                             onDismissRequest = { showMenu = false },
                             containerColor = Slate900
                         ) {
-                            if (!notification.isRead) {
+                            if (isTrash) {
                                 DropdownMenuItem(
-                                    text = { Text("Als gelesen markieren", color = Slate300) },
+                                    text = { Text("Wiederherstellen", color = Slate300) },
                                     onClick = {
                                         showMenu = false
-                                        onMarkRead()
+                                        onRestore()
                                     },
                                     leadingIcon = {
-                                        Icon(Icons.Default.Done, null, tint = Sky400)
+                                        Icon(Icons.Default.RotateLeft, null, tint = Sky400)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Endgültig löschen", color = Slate300) },
+                                    onClick = {
+                                        showMenu = false
+                                        onDeletePermanently()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.DeleteForever, null, tint = Red400)
+                                    }
+                                )
+                            } else {
+                                if (!notification.isRead) {
+                                    DropdownMenuItem(
+                                        text = { Text("Als gelesen markieren", color = Slate300) },
+                                        onClick = {
+                                            showMenu = false
+                                            onMarkRead()
+                                        },
+                                        leadingIcon = {
+                                            Icon(Icons.Default.Done, null, tint = Sky400)
+                                        }
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text("Schlummern (1h)", color = Slate300) },
+                                    onClick = {
+                                        showMenu = false
+                                        onSnooze()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Snooze, null, tint = Yellow400)
+                                    }
+                                )
+                                DropdownMenuItem(
+                                    text = { Text("Verwerfen", color = Slate300) },
+                                    onClick = {
+                                        showMenu = false
+                                        onDismiss()
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Close, null, tint = Red400)
                                     }
                                 )
                             }
-                            DropdownMenuItem(
-                                text = { Text("Schlummern (1h)", color = Slate300) },
-                                onClick = {
-                                    showMenu = false
-                                    onSnooze()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Snooze, null, tint = Yellow400)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Verwerfen", color = Slate300) },
-                                onClick = {
-                                    showMenu = false
-                                    onDismiss()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Close, null, tint = Red400)
-                                }
-                            )
                         }
                     }
                 }
@@ -421,6 +609,7 @@ private fun NotificationCard(
     }
 }
 
+/** Icon for a core [NotificationCategory]; unmatched raw categories use [rawCategoryIcon]. */
 private fun categoryIcon(category: NotificationCategory): ImageVector = when (category) {
     NotificationCategory.RAID -> Icons.Default.Storage
     NotificationCategory.SMART -> Icons.Default.HealthAndSafety
@@ -432,6 +621,7 @@ private fun categoryIcon(category: NotificationCategory): ImageVector = when (ca
     NotificationCategory.VPN -> Icons.Default.VpnKey
 }
 
+/** Label for a core [NotificationCategory]; unmatched raw categories use [rawCategoryLabel]. */
 private fun categoryLabel(category: NotificationCategory): String = when (category) {
     NotificationCategory.RAID -> "RAID"
     NotificationCategory.SMART -> "SMART"
@@ -442,6 +632,24 @@ private fun categoryLabel(category: NotificationCategory): String = when (catego
     NotificationCategory.SYNC -> "Sync"
     NotificationCategory.VPN -> "VPN"
 }
+
+/**
+ * Icon for a raw server category string. The server's category set is open (core
+ * categories, "lifecycle", plugin names), so this maps onto the closed
+ * [NotificationCategory] enum only when the raw string matches one of its entries,
+ * and falls back to a generic icon otherwise - unlike filtering, an icon lookup can
+ * degrade gracefully instead of needing to reach every possible value.
+ */
+private fun rawCategoryIcon(rawCategory: String): ImageVector =
+    NotificationCategory.entries.find { it.name.equals(rawCategory, ignoreCase = true) }
+        ?.let { categoryIcon(it) }
+        ?: Icons.Default.Category
+
+/** Label for a raw server category string; see [rawCategoryIcon] for the fallback rule. */
+private fun rawCategoryLabel(rawCategory: String): String =
+    NotificationCategory.entries.find { it.name.equals(rawCategory, ignoreCase = true) }
+        ?.let { categoryLabel(it) }
+        ?: rawCategory.replaceFirstChar { it.uppercase() }
 
 private fun typeColor(type: NotificationType): Color = when (type) {
     NotificationType.CRITICAL -> Red400

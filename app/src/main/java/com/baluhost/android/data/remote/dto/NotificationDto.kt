@@ -17,8 +17,8 @@ data class NotificationDto(
     val actionUrl: String?,
     @SerializedName("is_read")
     val isRead: Boolean,
-    @SerializedName("is_dismissed")
-    val isDismissed: Boolean,
+    @SerializedName("deleted_at")
+    val deletedAt: String? = null,
     val priority: Int,
     val metadata: Map<String, Any>?,
     @SerializedName("time_ago")
@@ -67,7 +67,9 @@ data class NotificationPreferencesDto(
     @SerializedName("min_priority")
     val minPriority: Int,
     @SerializedName("category_preferences")
-    val categoryPreferences: Map<String, CategoryPreference>?
+    val categoryPreferences: Map<String, CategoryPreference>?,
+    @SerializedName("trash_retention_days")
+    val trashRetentionDays: Int = 7
 )
 
 data class CategoryPreference(
@@ -93,7 +95,9 @@ data class NotificationPreferencesUpdate(
     @SerializedName("min_priority")
     val minPriority: Int? = null,
     @SerializedName("category_preferences")
-    val categoryPreferences: Map<String, CategoryPreference>? = null
+    val categoryPreferences: Map<String, CategoryPreference>? = null,
+    @SerializedName("trash_retention_days")
+    val trashRetentionDays: Int? = null
 )
 
 data class WsTokenResponse(

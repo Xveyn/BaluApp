@@ -9,6 +9,7 @@ import com.baluhost.android.domain.repository.SyncRepository
 import com.baluhost.android.domain.usecase.activity.GetRecentFilesUseCase
 import com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase
 import com.baluhost.android.domain.usecase.files.GetFilesUseCase
+import com.baluhost.android.domain.usecase.notification.ObserveUnreadCountUseCase
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
 import com.baluhost.android.domain.usecase.power.SendSoftSleepUseCase
 import com.baluhost.android.domain.usecase.power.SendSuspendUseCase
@@ -23,7 +24,6 @@ import io.mockk.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.*
 import org.junit.After
@@ -39,6 +39,7 @@ class DashboardViewModelVpnActionTest {
     private lateinit var networkStateManager: NetworkStateManager
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var notificationWebSocketManager: NotificationWebSocketManager
+    private lateinit var observeUnreadCountUseCase: ObserveUnreadCountUseCase
 
     // This flow feeds into networkStateManager.observeHomeNetworkStatus(),
     // which the ViewModel's observeHomeNetworkState() collects from.
@@ -50,6 +51,7 @@ class DashboardViewModelVpnActionTest {
         networkStateManager = mockk(relaxed = true)
         preferencesManager = mockk(relaxed = true)
         notificationWebSocketManager = mockk(relaxed = true)
+        observeUnreadCountUseCase = mockk()
 
         every { networkStateManager.observeHomeNetworkStatus(any()) } returns homeNetworkFlow
         every { networkStateManager.isVpnActive() } returns false
@@ -61,7 +63,7 @@ class DashboardViewModelVpnActionTest {
         every { preferencesManager.getDeviceId() } returns flowOf("device1")
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
         every { preferencesManager.isAutoVpnOnExternal() } returns flowOf(false)
-        every { notificationWebSocketManager.unreadCount } returns MutableStateFlow(0)
+        every { observeUnreadCountUseCase() } returns flowOf(0)
     }
 
     @After
@@ -84,6 +86,7 @@ class DashboardViewModelVpnActionTest {
             offlineQueueRepository = mockk(relaxed = true),
             syncRepository = mockk(relaxed = true),
             notificationWebSocketManager = notificationWebSocketManager,
+            observeUnreadCountUseCase = observeUnreadCountUseCase,
             sendWolUseCase = mockk(relaxed = true),
             sendSoftSleepUseCase = mockk(relaxed = true),
             sendSuspendUseCase = mockk(relaxed = true),

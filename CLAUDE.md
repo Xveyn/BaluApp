@@ -36,7 +36,7 @@ endpoint has to be done on the server side first.
 The intended layering is the conventional one — `presentation` depends on `domain`,
 `domain` is depended upon by `data` — and roughly the top half of the codebase
 follows it. **It is not followed uniformly, and assuming otherwise is the fastest
-way to write code that looks out of place.** Roughly half of the 55 use cases skip
+way to write code that looks out of place.** Roughly half of the 59 use cases skip
 the repository layer entirely and inject an `*Api`, a DAO, or a manager directly,
 in several cases even though a matching `domain/repository/*Repository` interface
 exists and simply goes unused (`auth/`, `files/`). Those use cases then own the HTTP
@@ -49,7 +49,7 @@ app/src/main/java/com/baluhost/android/
 ├── BaluHostApplication.kt      # @HiltAndroidApp entry point
 ├── di/                         # 7 Hilt modules, all SingletonComponent — see di/CLAUDE.md
 ├── data/
-│   ├── local/                  # Room, DataStore, encrypted secrets, in-memory caches (19)
+│   ├── local/                  # Room, DataStore, encrypted secrets, in-memory caches (21)
 │   ├── remote/                 # Retrofit interfaces, DTOs, OkHttp interceptors (42)
 │   ├── repository/             # 13 repository implementations; the layer that decides
 │   │                           #   what a failure means to the rest of the app
@@ -66,8 +66,8 @@ app/src/main/java/com/baluhost/android/
 │   │                           #   exception for SAF URIs
 │   ├── repository/             # 12 repository interfaces, bound in di/RepositoryModule.kt
 │   ├── repo/                   # LocalStorageRepository.kt only — legacy, see below (1)
-│   ├── usecase/                # 54 files in ten feature subdirectories, plus
-│   │                           #   OfflineQueueManager.kt (55 total)
+│   ├── usecase/                # 58 files in ten feature subdirectories, plus
+│   │                           #   OfflineQueueManager.kt (59 total)
 │   ├── adapter/                # CloudAdapter.kt — the storage-adapter interface (1)
 │   └── service/                # ConflictDetectionService.kt — sync conflict detection (1)
 ├── presentation/

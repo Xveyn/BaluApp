@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Notifications are now available without a server connection: the list is kept
+  on the device and is there immediately on the next start. Marking read,
+  dismissing, restoring and snoozing all work offline and reach the server as
+  soon as it is reachable again, instead of being lost.
+- A trash for notifications — dismissed entries move to their own tab, where they
+  can be restored, deleted for good one by one, or cleared in one go.
+- Filters by category and by type, an unread-only view, and bulk "mark all read"
+  and "dismiss all" actions on the notification list.
+
 ### Changed
 
 - CI/CD rework: `ci.yml` now runs on every push to `development` (in addition
