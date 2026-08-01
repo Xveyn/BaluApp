@@ -154,4 +154,16 @@ class NotificationMergeTest {
         assertEquals(until, merged.state.snoozedUntil)
         assertTrue(merged.pushes.isEmpty())
     }
+
+    @Test
+    fun `a confirmed snooze intent is cleared`() {
+        val until = now.plusSeconds(7200)
+        val merged = NotificationMerge.merge(
+            local(localSnoozedUntil = until), server(snoozedUntil = until), now
+        )
+
+        assertNull(merged.state.localSnoozedUntil)
+        assertEquals(until, merged.state.snoozedUntil)
+        assertTrue(merged.pushes.isEmpty())
+    }
 }

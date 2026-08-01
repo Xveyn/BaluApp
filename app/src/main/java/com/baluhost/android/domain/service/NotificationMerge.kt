@@ -75,8 +75,11 @@ object NotificationMerge {
         }
 
         // Snooze is stored absolute; the endpoint takes whole hours from now.
-        val snoozeIntent = local.localSnoozedUntil?.takeIf { it.isAfter(now) }
-        if (snoozeIntent != null && snoozeIntent != server.snoozedUntil) {
+        // An expired intent is dropped; a confirmed one (server already agrees)
+        // is cleared the same way readIntent is once server.isRead is true.
+        val pendingSnoozeIntent = local.localSnoozedUntil?.takeIf { it.isAfter(now) }
+        val snoozeIntent = pendingSnoozeIntent?.takeUnless { it == server.snoozedUntil }
+        if (snoozeIntent != null) {
             pushes.add(Push.Snooze(hoursUntil(snoozeIntent, now)))
         }
 
