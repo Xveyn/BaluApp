@@ -254,7 +254,29 @@ class NotificationRepositoryImpl @Inject constructor(
     }
 
     override suspend fun upsertFromPush(entity: NotificationEntity) {
-        notificationDao.upsertAll(listOf(entity))
+        // A push (FCM/WebSocket) knows nothing about this device's own pending decisions.
+        // Blindly REPLACE-ing the row would silently clobber an unpushed dismiss/read/
+        // snooze/restore intent — the same failure shape emptyTrash() had. Merge onto the
+        // existing row instead: content comes from the push, state that only this device
+        // knows about comes from what's already cached.
+        val existing = notificationDao.find(entity.ownerUserId, entity.id)
+        val toStore = if (existing != null) {
+            entity.copy(
+                // isRead is monotone: never let a push flip an already-read row back to unread.
+                isRead = existing.isRead || entity.isRead,
+                // A push carries no trash/snooze information at all; the authoritative
+                // correction for these comes from sync(), not from a partial push payload.
+                deletedAt = existing.deletedAt,
+                snoozedUntil = existing.snoozedUntil,
+                localReadAt = existing.localReadAt,
+                localTrashedAt = existing.localTrashedAt,
+                localRestoredAt = existing.localRestoredAt,
+                localSnoozedUntil = existing.localSnoozedUntil
+            )
+        } else {
+            entity
+        }
+        notificationDao.upsertAll(listOf(toStore))
     }
 
     override suspend fun clearAll() {

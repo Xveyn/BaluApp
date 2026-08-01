@@ -204,4 +204,68 @@ class NotificationRepositoryImplTest {
         coVerify(exactly = 1) { api.emptyTrash() }
         coVerify(exactly = 0) { dao.deleteAllById(owner, any()) }
     }
+
+    @Test
+    fun `a push for an id with an unpushed trash intent keeps that intent and deletedAt`() = runTest {
+        val trashedAt = Instant.now()
+        val deletedAt = Instant.now()
+        coEvery { dao.find(owner, 11) } returns entity(id = 11, localTrashedAt = trashedAt).copy(deletedAt = deletedAt)
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.upsertAll(capture(stored)) } returns Unit
+        val push = entity(id = 11).copy(source = "FCM", isPartial = true, title = "pushed title")
+
+        repository.upsertFromPush(push)
+
+        val row = stored.captured.single()
+        assertEquals(trashedAt, row.localTrashedAt)
+        assertEquals(deletedAt, row.deletedAt)
+    }
+
+    @Test
+    fun `a push for an id with an unpushed read intent keeps it and leaves isRead true`() = runTest {
+        val readAt = Instant.now()
+        coEvery { dao.find(owner, 12) } returns entity(id = 12, isRead = true, localReadAt = readAt)
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.upsertAll(capture(stored)) } returns Unit
+        val push = entity(id = 12, isRead = false).copy(source = "FCM", isPartial = true)
+
+        repository.upsertFromPush(push)
+
+        val row = stored.captured.single()
+        assertTrue(row.isRead)
+        assertEquals(readAt, row.localReadAt)
+    }
+
+    @Test
+    fun `a push for an id with no existing row inserts it unchanged`() = runTest {
+        coEvery { dao.find(owner, 13) } returns null
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.upsertAll(capture(stored)) } returns Unit
+        val push = entity(id = 13).copy(source = "FCM", isPartial = true, title = "brand new")
+
+        repository.upsertFromPush(push)
+
+        assertEquals(listOf(push), stored.captured)
+    }
+
+    @Test
+    fun `a push for an existing row with no pending intent still updates the content fields`() = runTest {
+        coEvery { dao.find(owner, 14) } returns entity(id = 14)
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.upsertAll(capture(stored)) } returns Unit
+        val push = entity(id = 14).copy(
+            title = "Updated title",
+            message = "Updated message",
+            priority = 5,
+            actionUrl = "https://example.test/action"
+        )
+
+        repository.upsertFromPush(push)
+
+        val row = stored.captured.single()
+        assertEquals("Updated title", row.title)
+        assertEquals("Updated message", row.message)
+        assertEquals(5, row.priority)
+        assertEquals("https://example.test/action", row.actionUrl)
+    }
 }
