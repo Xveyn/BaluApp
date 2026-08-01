@@ -20,7 +20,7 @@ Seven Hilt modules, all `@InstallIn(SingletonComponent::class)` — everything t
 | Module | Style | Provides |
 |---|---|---|
 | `AppModule.kt` | `@Provides` (`object`) | Application `Context`, `NetworkMonitor`, `Base64Decoder`, `MobileApiFactory`, `Clock` |
-| `DatabaseModule.kt` | `@Provides` (`object`) | DataStore, `PreferencesManager`, `SecureStorage`, `BaluHostDatabase` (Room), its DAOs (`FileDao`, `UserDao`, `PendingOperationDao`, `FileActivityDao`) |
+| `DatabaseModule.kt` | `@Provides` (`object`) | DataStore, `PreferencesManager`, `SecureStorage`, `BaluHostDatabase` (Room, registers `MIGRATION_4_5` via `.addMigrations(...)` ahead of the `fallbackToDestructiveMigration()`), its DAOs (`FileDao`, `UserDao`, `PendingOperationDao`, `FileActivityDao`, `NotificationDao`) |
 | `ImageLoaderModule.kt` | `@Provides` (`object`) | Coil `ImageLoader`, reusing `NetworkModule`'s `OkHttpClient` |
 | `NetworkModule.kt` | `@Provides` (`object`) | OkHttp interceptors, `OkHttpClient` (default + `@Named("websocket")`), `Retrofit`, all 13 `*Api` interfaces, `NetworkStateManager` |
 | `RepositoryModule.kt` | `@Binds` (`abstract class`) | Binds all 12 `domain/repository/*Repository` interfaces to their `data/repository/*RepositoryImpl` |

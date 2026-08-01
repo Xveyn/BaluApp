@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.baluhost.android.data.local.database.BaluHostDatabase
+import com.baluhost.android.data.local.database.MIGRATION_4_5
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.local.security.SecurePreferencesManager
 import com.baluhost.android.data.local.security.SecureStorage
@@ -57,18 +58,19 @@ object DatabaseModule {
             BaluHostDatabase::class.java,
             Constants.DATABASE_NAME
         )
+            .addMigrations(MIGRATION_4_5)
             .fallbackToDestructiveMigration() // For development, remove in production
             .build()
     }
-    
+
     @Provides
     @Singleton
     fun provideFileDao(database: BaluHostDatabase) = database.fileDao()
-    
+
     @Provides
     @Singleton
     fun provideUserDao(database: BaluHostDatabase) = database.userDao()
-    
+
     @Provides
     @Singleton
     fun providePendingOperationDao(database: BaluHostDatabase) = database.pendingOperationDao()
@@ -76,4 +78,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideFileActivityDao(database: BaluHostDatabase) = database.fileActivityDao()
+
+    @Provides
+    @Singleton
+    fun provideNotificationDao(database: BaluHostDatabase) = database.notificationDao()
 }

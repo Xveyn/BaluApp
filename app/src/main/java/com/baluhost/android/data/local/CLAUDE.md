@@ -4,9 +4,9 @@ Everything the app persists or caches on-device: the Room database, DataStore pr
 
 ## Structure
 
-Four areas, 19 files total:
+Four areas, 21 files total:
 
-- `database/` — Room. `BaluHostDatabase` (version 4), 4 DAOs (`dao/`), 4 entities (`entities/`), one `Converters` (`converters/`), and one mapper (`mappers/PendingOperationMapper.kt`).
+- `database/` — Room. `BaluHostDatabase` (version 5), 5 DAOs (`dao/`), 5 entities (`entities/`), one `Converters` (`converters/`), and one mapper (`mappers/PendingOperationMapper.kt`).
 - `datastore/PreferencesManager.kt` — non-sensitive app preferences via Jetpack DataStore.
 - `security/` — 5 files holding everything sensitive.
 - `cache/CachedFileDao.kt` and `PluginTranslationCache.kt` — two standalone caches that don't fit the other two buckets.
@@ -24,16 +24,18 @@ Four areas, 19 files total:
 ### `database/`
 | File | Role |
 |---|---|
-| `BaluHostDatabase.kt` | Room database definition, version 4, registers all entities/DAOs/converters |
+| `BaluHostDatabase.kt` | Room database definition, version 5, registers all entities/DAOs/converters; also holds `MIGRATION_4_5` (top-level `val` in the same file) |
 | `dao/FileDao.kt` | CRUD for cached file listings |
 | `dao/FileActivityDao.kt` | CRUD for the buffered file-activity feed |
 | `dao/PendingOperationDao.kt` | CRUD for the offline operation queue |
 | `dao/UserDao.kt` | CRUD for cached user info |
+| `dao/NotificationDao.kt` | CRUD + observation for the local notification cache, scoped by `owner_user_id` |
 | `entities/FileEntity.kt` | Room entity for cached files |
 | `entities/FileActivityEntity.kt` | Room entity for buffered activity entries |
 | `entities/PendingOperationEntity.kt` | Room entity for queued offline operations |
 | `entities/UserEntity.kt` | Room entity for cached user info |
-| `converters/Converters.kt` | Room `@TypeConverters` for the database |
+| `entities/NotificationEntity.kt` | Room entity for the local notification cache, PK `(owner_user_id, id)`; the four `local*` timestamp columns double as the offline outbox — see the doc comment on the class |
+| `converters/Converters.kt` | Room `@TypeConverters` for the database, including `fromStringAnyMap`/`toStringAnyMap` (Gson-backed `Map<String, Any>?` ↔ `String?` for `NotificationEntity.metadata`) |
 | `mappers/PendingOperationMapper.kt` | `PendingOperationEntity` ↔ `PendingOperation` domain model |
 
 ### `datastore/`

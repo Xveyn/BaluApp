@@ -49,7 +49,7 @@ app/src/main/java/com/baluhost/android/
 ├── BaluHostApplication.kt      # @HiltAndroidApp entry point
 ├── di/                         # 7 Hilt modules, all SingletonComponent — see di/CLAUDE.md
 ├── data/
-│   ├── local/                  # Room, DataStore, encrypted secrets, in-memory caches (19)
+│   ├── local/                  # Room, DataStore, encrypted secrets, in-memory caches (21)
 │   ├── remote/                 # Retrofit interfaces, DTOs, OkHttp interceptors (42)
 │   ├── repository/             # 13 repository implementations; the layer that decides
 │   │                           #   what a failure means to the rest of the app
