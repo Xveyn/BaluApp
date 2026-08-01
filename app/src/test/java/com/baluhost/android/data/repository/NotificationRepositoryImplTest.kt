@@ -178,4 +178,30 @@ class NotificationRepositoryImplTest {
         assertTrue(result.isFailure)
         coVerify(exactly = 0) { dao.delete(owner, 5) }
     }
+
+    @Test
+    fun `emptyTrash deletes a locally-cached row the server had trashed`() = runTest {
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 7).copy(deletedAt = Instant.now())
+        )
+
+        val result = repository.emptyTrash(owner)
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) { api.emptyTrash() }
+        coVerify(exactly = 1) { dao.deleteAllById(owner, listOf(7)) }
+    }
+
+    @Test
+    fun `emptyTrash keeps a row whose trash intent has not been pushed yet`() = runTest {
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 8, localTrashedAt = Instant.now()).copy(deletedAt = Instant.now())
+        )
+
+        val result = repository.emptyTrash(owner)
+
+        assertTrue(result.isSuccess)
+        coVerify(exactly = 1) { api.emptyTrash() }
+        coVerify(exactly = 0) { dao.deleteAllById(owner, any()) }
+    }
 }

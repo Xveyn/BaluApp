@@ -8,6 +8,7 @@ A repository method calls the relevant `*Api`, maps the DTO to a domain model, a
 
 This is the dominant pattern, not a universal one — know the exceptions before assuming a method follows it:
 - `FileRepository.getFiles()` and `OfflineQueueRepositoryImpl.getPendingOperations()/getPendingCount()` return `Flow<T>` directly, not `Result<T>` — these are continuous cache reads, not one-shot calls, so there's no single outcome to wrap.
+- `NotificationRepositoryImpl.observeNotifications()/observeUnreadCount()` likewise return `Flow<T>` directly — cache-first reads straight off `NotificationDao`, backing the local notification table that `sync()` reconciles with the server.
 - `DeviceRepositoryImpl.deleteDevice()` throws instead of returning `Result` — see `domain/repository/DeviceRepository.kt`'s `@throws Exception` contract. Callers need a `try/catch`, not a `when`.
 - `PowerRepositoryImpl.checkNasStatus()` returns the custom sealed type `NasStatusResult`, not `Result<T>`, because a Fritz!Box check has outcomes (`FritzBoxNotConfigured`, `FritzBoxAuthError`, `FritzBoxUnreachable`, `Resolved(NasStatus)`) that don't fit the generic success/error shape.
 - `VpnRepositoryImpl.getCachedVpnConfig()` returns `VpnConfig?` directly — a local cache read, same reasoning as the `Flow` cases above.

@@ -238,8 +238,11 @@ class NotificationRepositoryImpl @Inject constructor(
     override suspend fun emptyTrash(ownerUserId: Int): Result<Unit> {
         return try {
             notificationsApi.emptyTrash()
+            // A row whose deletedAt is only an unpushed dismissLocally intent must survive:
+            // the server never learned it was trashed, so wiping it here would drop the
+            // user's decision — the next sync() is still the way that intent gets pushed.
             val trashedIds = notificationDao.getAll(ownerUserId)
-                .filter { it.deletedAt != null }
+                .filter { it.deletedAt != null && !it.hasPendingIntent }
                 .map { it.id }
             if (trashedIds.isNotEmpty()) {
                 notificationDao.deleteAllById(ownerUserId, trashedIds)
