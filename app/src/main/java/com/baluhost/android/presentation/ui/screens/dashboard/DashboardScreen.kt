@@ -91,6 +91,7 @@ fun DashboardScreen(
     val wolAvailability by viewModel.wolAvailability.collectAsState()
     val desktopState by viewModel.desktopState.collectAsState()
     val gamingModeAvailable by viewModel.gamingModeAvailable.collectAsState()
+    val gamingModeEndAvailable by viewModel.gamingModeEndAvailable.collectAsState()
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -263,6 +264,7 @@ fun DashboardScreen(
                         wolAvailability = wolAvailability,
                         desktopState = desktopState,
                         gamingModeAvailable = gamingModeAvailable,
+                        gamingModeEndAvailable = gamingModeEndAvailable,
                         onPowerDialogOpened = { viewModel.onPowerDialogOpened() },
                         onSendWol = { viewModel.sendWol() },
                         onSendWake = { viewModel.sendWake() },
@@ -271,6 +273,7 @@ fun DashboardScreen(
                         onEnableDesktop = { viewModel.enableDesktop() },
                         onDisableDesktop = { viewModel.disableDesktop() },
                         onStartGamingMode = { viewModel.startGamingMode() },
+                        onEndGamingMode = { viewModel.endGamingMode() },
                         onNavigateToFritzBoxSettings = onNavigateToFritzBoxSettings
                     )
 
@@ -915,6 +918,7 @@ private fun ServerStatusStrip(
     wolAvailability: WolAvailability,
     desktopState: DesktopState,
     gamingModeAvailable: Boolean,
+    gamingModeEndAvailable: Boolean,
     onPowerDialogOpened: () -> Unit,
     onSendWol: () -> Unit,
     onSendWake: () -> Unit,
@@ -923,6 +927,7 @@ private fun ServerStatusStrip(
     onEnableDesktop: () -> Unit,
     onDisableDesktop: () -> Unit,
     onStartGamingMode: () -> Unit,
+    onEndGamingMode: () -> Unit,
     onNavigateToFritzBoxSettings: () -> Unit
 ) {
     var showPowerDialog by remember { mutableStateOf(false) }
@@ -1127,6 +1132,31 @@ private fun ServerStatusStrip(
                                     onClick = {
                                         showPowerDialog = false
                                         onStartGamingMode()
+                                    }
+                                )
+                            }
+                            // Eigenes Flag, kein when() über einen selbst
+                            // geführten Zustand: welche Richtung gerade gilt,
+                            // entscheidet seit BaluHost PR #500 der Server
+                            // (Merker-Datei × Display-Zählung) und nennt genau
+                            // eine davon im Manifest. Ob Big Picture läuft, ist
+                            // von außen nicht messbar — die App könnte es also
+                            // gar nicht nachrechnen und liest deshalb bloß ab.
+                            // Zwei unabhängige Blöcke statt eines Umschalters
+                            // halten sie zusätzlich gegen einen Serverstand
+                            // zwischen #497 und #500 korrekt, der beide nennt.
+                            // Kein Bestätigungsdialog — der Server bricht von
+                            // sich aus ab, wenn ein Spiel läuft, und lässt die
+                            // Displays unangetastet.
+                            if (gamingModeEndAvailable) {
+                                PowerOptionButton(
+                                    icon = Icons.Default.Monitor,
+                                    label = "Gaming-Modus beenden",
+                                    description = "Big Picture schließen + Fenster minimieren",
+                                    color = Sky400,
+                                    onClick = {
+                                        showPowerDialog = false
+                                        onEndGamingMode()
                                     }
                                 )
                             }
