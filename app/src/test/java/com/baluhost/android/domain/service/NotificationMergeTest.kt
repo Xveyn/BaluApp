@@ -156,14 +156,85 @@ class NotificationMergeTest {
     }
 
     @Test
-    fun `a confirmed snooze intent is cleared`() {
-        val until = now.plusSeconds(7200)
+    fun `a snooze the server echoes back a moment later counts as confirmed`() {
+        // The realistic shape: the intent is `Instant.now() + hours` computed on
+        // this device, the echo is the server's own now + whole hours. They are
+        // never identical, and requiring identity re-pushed the snooze on every
+        // sync - each push extending the server-side expiry by another hour.
+        val intent = now.plusSeconds(3600)
+        val serverEcho = intent.plusSeconds(4)
+
         val merged = NotificationMerge.merge(
-            local(localSnoozedUntil = until), server(snoozedUntil = until), now
+            local(localSnoozedUntil = intent), server(snoozedUntil = serverEcho), now
         )
 
         assertNull(merged.state.localSnoozedUntil)
-        assertEquals(until, merged.state.snoozedUntil)
+        assertEquals(serverEcho, merged.state.snoozedUntil)
         assertTrue(merged.pushes.isEmpty())
+    }
+
+    @Test
+    fun `an echo slightly earlier than the intent still counts as confirmed`() {
+        // Clock skew and request latency can land the server's answer a little
+        // before the intent; that is not a different snooze.
+        val intent = now.plusSeconds(3600)
+
+        val merged = NotificationMerge.merge(
+            local(localSnoozedUntil = intent), server(snoozedUntil = intent.minusSeconds(90)), now
+        )
+
+        assertNull(merged.state.localSnoozedUntil)
+        assertTrue(merged.pushes.isEmpty())
+    }
+
+    @Test
+    fun `a server snooze materially shorter than the intent is re-pushed`() {
+        val merged = NotificationMerge.merge(
+            local(localSnoozedUntil = now.plusSeconds(3600 * 24)),
+            server(snoozedUntil = now.plusSeconds(3600)),
+            now
+        )
+
+        assertEquals(NotificationMerge.Push.Snooze(24), merged.pushes.single())
+    }
+
+    @Test
+    fun `no server snooze at all leaves the intent pending`() {
+        val merged = NotificationMerge.merge(
+            local(localSnoozedUntil = now.plusSeconds(3600)), server(snoozedUntil = null), now
+        )
+
+        assertEquals(NotificationMerge.Push.Snooze(1), merged.pushes.single())
+    }
+
+    // --- the trash tie-break ---
+
+    @Test
+    fun `a dismiss and a restore carrying the same instant resolve to the dismiss`() {
+        val at = now.minusSeconds(60)
+
+        val merged = NotificationMerge.merge(
+            local(localTrashedAt = at, localRestoredAt = at), server(deletedAt = null), now
+        )
+
+        assertTrue(merged.pushes.contains(NotificationMerge.Push.Dismiss))
+        assertFalse(merged.pushes.contains(NotificationMerge.Push.Restore))
+        assertEquals(at, merged.state.localTrashedAt)
+        assertNull(merged.state.localRestoredAt)
+    }
+
+    @Test
+    fun `effectiveTrashIntent reports whichever intent is present on its own`() {
+        val at = now.minusSeconds(60)
+
+        assertNull(NotificationMerge.effectiveTrashIntent(null, null))
+        assertEquals(
+            NotificationMerge.TrashIntent.Dismiss(at),
+            NotificationMerge.effectiveTrashIntent(at, null)
+        )
+        assertEquals(
+            NotificationMerge.TrashIntent.Restore(at),
+            NotificationMerge.effectiveTrashIntent(null, at)
+        )
     }
 }

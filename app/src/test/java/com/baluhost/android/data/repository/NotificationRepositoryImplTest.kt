@@ -5,16 +5,24 @@ import com.baluhost.android.data.local.database.entities.NotificationEntity
 import com.baluhost.android.data.remote.api.NotificationsApi
 import com.baluhost.android.data.remote.dto.NotificationDto
 import com.baluhost.android.data.remote.dto.NotificationListResponse
+import com.baluhost.android.util.Clock
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import io.mockk.slot
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import retrofit2.HttpException
+import retrofit2.Response
 import java.time.Instant
 
 class NotificationRepositoryImplTest {
@@ -25,12 +33,19 @@ class NotificationRepositoryImplTest {
 
     private val owner = 3
 
+    /** Fixed so the snooze and time-ago boundaries don't race the wall clock. */
+    private val fixedNow: Instant = Instant.parse("2026-08-01T12:00:00Z")
+
     @Before
     fun setup() {
         api = mockk(relaxed = true)
         dao = mockk(relaxed = true)
-        repository = NotificationRepositoryImpl(api, dao)
+        repository = NotificationRepositoryImpl(api, dao, Clock { fixedNow })
     }
+
+    /** The server answered, and answered no — the shape that retires an intent. */
+    private fun httpError(code: Int) =
+        HttpException(Response.error<Any>(code, "".toResponseBody("text/plain".toMediaType())))
 
     private fun dto(id: Int, isRead: Boolean = false, deletedAt: String? = null) = NotificationDto(
         id = id,
@@ -51,6 +66,15 @@ class NotificationRepositoryImplTest {
 
     private fun listOfDto(vararg items: NotificationDto) = NotificationListResponse(
         notifications = items.toList(), total = items.size, unreadCount = 0, page = 1, pageSize = 50
+    )
+
+    /** A full page, i.e. one the reconcile has to follow up on. */
+    private fun fullPage(page: Int, ids: List<Int>, total: Int) = NotificationListResponse(
+        notifications = ids.map { dto(id = it) },
+        total = total,
+        unreadCount = 0,
+        page = page,
+        pageSize = 50
     )
 
     private fun entity(
@@ -105,7 +129,7 @@ class NotificationRepositoryImplTest {
             entity(id = 9).copy(source = "FCM", isPartial = true, title = "from push")
         )
         val stored = slot<List<NotificationEntity>>()
-        coEvery { dao.upsertAll(capture(stored)) } returns Unit
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
 
         repository.sync(owner)
 
@@ -113,6 +137,207 @@ class NotificationRepositoryImplTest {
         assertEquals("Title 9", row.title)
         assertEquals("REST", row.source)
         assertTrue(!row.isPartial)
+    }
+
+    // --- what the reconcile stores after it has pushed (C1) ---
+
+    @Test
+    fun `sync stores the trash state the server reports after the dismiss it just pushed`() = runTest {
+        // The list fetch still reports the row as active, because it happened before
+        // the dismiss below. Writing that snapshot back is what made a dismissed row
+        // reappear in the inbox a moment later.
+        val trashedAt = fixedNow.minusSeconds(5)
+        val serverDeletedAt = "2026-08-01T12:00:01Z"
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns listOfDto(dto(id = 1))
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 1, localTrashedAt = trashedAt).copy(deletedAt = trashedAt)
+        )
+        coEvery { api.dismiss(1) } returns dto(id = 1, deletedAt = serverDeletedAt)
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        val row = stored.captured.single { it.id == 1 }
+        assertEquals(Instant.parse(serverDeletedAt), row.deletedAt)
+        assertNull(row.localTrashedAt)
+    }
+
+    @Test
+    fun `a dismiss that never reached the server keeps its intent for the next sync`() = runTest {
+        val trashedAt = fixedNow.minusSeconds(5)
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns listOfDto(dto(id = 1))
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 1, localTrashedAt = trashedAt).copy(deletedAt = trashedAt)
+        )
+        coEvery { api.dismiss(1) } throws java.io.IOException("offline")
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        assertEquals(trashedAt, stored.captured.single { it.id == 1 }.localTrashedAt)
+    }
+
+    @Test
+    fun `sync stores the restore the server confirmed instead of the trash state it was fetched with`() = runTest {
+        val restoredAt = fixedNow.minusSeconds(5)
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns listOfDto()
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns
+            listOfDto(dto(id = 2, deletedAt = "2026-08-01T09:00:00Z"))
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 2).copy(localRestoredAt = restoredAt)
+        )
+        coEvery { api.restore(2) } returns dto(id = 2, deletedAt = null)
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        val row = stored.captured.single { it.id == 2 }
+        assertNull(row.deletedAt)
+        assertNull(row.localRestoredAt)
+    }
+
+    // --- what the reconcile is allowed to delete (C2) ---
+
+    @Test
+    fun `sync pages through the server instead of stopping after the first page`() = runTest {
+        coEvery { api.getNotifications(any(), any(), any(), 1, any()) } returns
+            fullPage(page = 1, ids = (51..100).toList(), total = 60)
+        coEvery { api.getNotifications(any(), any(), any(), 2, any()) } returns
+            NotificationListResponse(
+                notifications = (41..50).map { dto(id = it) },
+                total = 60, unreadCount = 0, page = 2, pageSize = 50
+            )
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns emptyList()
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        assertEquals(60, stored.captured.size)
+        coVerify(exactly = 1) { api.getNotifications(any(), any(), any(), 2, any()) }
+    }
+
+    @Test
+    fun `the orphan cleanup targets exactly the cached rows the server no longer has`() = runTest {
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns
+            listOfDto(dto(id = 5), dto(id = 7))
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns
+            listOfDto(dto(id = 9, deletedAt = "2026-08-01T09:00:00Z"))
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 5),
+            entity(id = 7),
+            entity(id = 9),
+            entity(id = 11), // gone from the server, nothing pending -> the only deletion
+            entity(id = 13, localReadAt = fixedNow) // gone, but still owes the server a read
+        )
+        val deleted = slot<List<Int>>()
+        coEvery { dao.replaceReconciled(owner, capture(deleted), any()) } returns Unit
+
+        repository.sync(owner)
+
+        assertEquals(listOf(11), deleted.captured)
+    }
+
+    @Test
+    fun `a fetch that stopped at the cache limit does not delete rows older than it saw`() = runTest {
+        // 10 full pages of 50 = CACHE_LIMIT, with the server reporting far more:
+        // everything below the oldest id fetched is simply unknown, not deleted.
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } answers {
+            // Odd ids only, so an even id can be absent from a page the fetch did cover.
+            val page = arg<Int>(3)
+            val first = 10_001 - (page - 1) * 100
+            fullPage(page = page, ids = (first downTo first - 98 step 2).toList(), total = 10_000)
+        }
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns listOf(
+            entity(id = 9_600), // inside the fetched range and absent -> really gone
+            entity(id = 100) // far below the oldest page fetched -> unknown, keep
+        )
+        val deleted = slot<List<Int>>()
+        coEvery { dao.replaceReconciled(owner, capture(deleted), any()) } returns Unit
+
+        repository.sync(owner)
+
+        assertTrue(deleted.captured.contains(9_600))
+        assertFalse(deleted.captured.contains(100))
+    }
+
+    // --- intents on rows the server does not return at all (I1) ---
+
+    @Test
+    fun `a pending intent on a row the server no longer returns is still pushed`() = runTest {
+        val trashedAt = fixedNow.minusSeconds(60)
+        val stranded = entity(id = 21, localTrashedAt = trashedAt).copy(deletedAt = trashedAt)
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns listOfDto()
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns listOf(stranded)
+        coEvery { dao.getWithPendingIntent(owner) } returns listOf(stranded)
+        coEvery { api.dismiss(21) } returns dto(id = 21, deletedAt = "2026-08-01T12:00:01Z")
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        coVerify(exactly = 1) { api.dismiss(21) }
+        assertNull(stored.captured.single { it.id == 21 }.localTrashedAt)
+    }
+
+    @Test
+    fun `an intent the server refuses is retired rather than re-pushed forever`() = runTest {
+        // emptyTrash() left this row behind; the server has since forgotten it, so
+        // the dismiss can never land. Keeping the intent would exempt the row from
+        // eviction and orphan cleanup for good.
+        val stranded = entity(id = 22, localTrashedAt = fixedNow.minusSeconds(60))
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns listOfDto()
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns listOf(stranded)
+        coEvery { dao.getWithPendingIntent(owner) } returns listOf(stranded)
+        coEvery { api.dismiss(22) } throws httpError(404)
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        assertNull(stored.captured.single { it.id == 22 }.localTrashedAt)
+    }
+
+    @Test
+    fun `a stranded intent that could not be delivered stays pending`() = runTest {
+        val trashedAt = fixedNow.minusSeconds(60)
+        val stranded = entity(id = 23, localTrashedAt = trashedAt)
+        coEvery { api.getNotifications(any(), any(), any(), any(), any()) } returns listOfDto()
+        coEvery { api.getTrash(any(), any(), any(), any()) } returns listOfDto()
+        coEvery { dao.getAll(owner) } returns listOf(stranded)
+        coEvery { dao.getWithPendingIntent(owner) } returns listOf(stranded)
+        coEvery { api.dismiss(23) } throws java.io.IOException("offline")
+        val stored = slot<List<NotificationEntity>>()
+        coEvery { dao.replaceReconciled(owner, any(), capture(stored)) } returns Unit
+
+        repository.sync(owner)
+
+        assertEquals(trashedAt, stored.captured.single { it.id == 23 }.localTrashedAt)
+    }
+
+    // --- the unread badge and the list have to agree (I4) ---
+
+    @Test
+    fun `the unread count leaves out the rows the inbox hides as snoozed`() = runTest {
+        coEvery { dao.observe(owner, false) } returns flowOf(
+            listOf(
+                entity(id = 1),
+                entity(id = 2).copy(snoozedUntil = fixedNow.plusSeconds(3600)),
+                entity(id = 3).copy(snoozedUntil = fixedNow.minusSeconds(60)),
+                entity(id = 4, isRead = true)
+            )
+        )
+
+        assertEquals(2, repository.observeUnreadCount(owner).first())
     }
 
     @Test
@@ -123,15 +348,16 @@ class NotificationRepositoryImplTest {
         val result = repository.sync(owner)
 
         assertTrue(result.isFailure)
+        coVerify(exactly = 0) { dao.replaceReconciled(any(), any(), any()) }
         coVerify(exactly = 0) { dao.upsertAll(any()) }
     }
 
     @Test
-    fun `eviction keeps rows whose local decision has not been pushed`() = runTest {
+    fun `eviction takes the oldest rows the DAO reports as evictable`() = runTest {
         coEvery { dao.count(owner) } returns 502
         coEvery { dao.getEvictable(owner) } returns listOf(entity(id = 1), entity(id = 2))
         val evicted = slot<List<Int>>()
-        coEvery { dao.deleteAllById(owner, capture(evicted)) } returns Unit
+        coEvery { dao.deleteAllByIdChunked(owner, capture(evicted)) } returns Unit
 
         repository.evictOverflow(owner)
 
@@ -189,7 +415,7 @@ class NotificationRepositoryImplTest {
 
         assertTrue(result.isSuccess)
         coVerify(exactly = 1) { api.emptyTrash() }
-        coVerify(exactly = 1) { dao.deleteAllById(owner, listOf(7)) }
+        coVerify(exactly = 1) { dao.deleteAllByIdChunked(owner, listOf(7)) }
     }
 
     @Test
@@ -202,7 +428,7 @@ class NotificationRepositoryImplTest {
 
         assertTrue(result.isSuccess)
         coVerify(exactly = 1) { api.emptyTrash() }
-        coVerify(exactly = 0) { dao.deleteAllById(owner, any()) }
+        coVerify(exactly = 0) { dao.deleteAllByIdChunked(owner, any()) }
     }
 
     @Test
