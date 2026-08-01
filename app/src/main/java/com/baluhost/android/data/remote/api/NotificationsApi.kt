@@ -8,7 +8,6 @@ interface NotificationsApi {
     @GET("notifications")
     suspend fun getNotifications(
         @Query("unread_only") unreadOnly: Boolean = false,
-        @Query("include_dismissed") includeDismissed: Boolean = false,
         @Query("category") category: String? = null,
         @Query("notification_type") notificationType: String? = null,
         @Query("page") page: Int = 1,
