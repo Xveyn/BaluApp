@@ -135,23 +135,48 @@ class NotificationsViewModel @Inject constructor(
                             // deletedAt set (see NotificationDao.observe's trashed condition).
                             notification.deletedAt != null || !isSnoozedIntoFuture(notification, now)
                         }
+                        val availableCategories = visible.map { it.rawCategory }.distinct().sorted()
+                        // A selected category with no matching chip in availableCategories
+                        // is treated as if it were unset for this emission - both for what
+                        // gets filtered (so the list isn't spuriously empty for a frame) and
+                        // for what gets written back below (so it doesn't stay silently
+                        // active). This is deliberately general rather than only resetting
+                        // on setTab: the same "empty list, no chip selected" symptom is also
+                        // reachable without switching tabs at all, e.g. restoring the one
+                        // remaining trash row of the selected category. See Fix round 2 in
+                        // task-10-report.md for the reasoning against the narrower repair.
+                        val effectiveCategory = filter.category?.takeIf { selected ->
+                            availableCategories.any { it.equals(selected, ignoreCase = true) }
+                        }
                         val filtered = visible.filter { notification ->
-                            (filter.category == null ||
-                                notification.rawCategory.equals(filter.category, ignoreCase = true)) &&
+                            (effectiveCategory == null ||
+                                notification.rawCategory.equals(effectiveCategory, ignoreCase = true)) &&
                                 (filter.type == null || notification.type == filter.type) &&
                                 (!filter.unreadOnly || !notification.isRead)
                         }
                         FilteredNotifications(
                             filtered = filtered,
-                            availableCategories = visible.map { it.rawCategory }.distinct().sorted()
+                            availableCategories = availableCategories,
+                            requestedCategory = filter.category,
+                            effectiveCategory = effectiveCategory
                         )
                     }
                 }
                 .collect { result ->
+                    if (result.effectiveCategory != result.requestedCategory) {
+                        // Correct the upstream filter, not just this emission's display -
+                        // otherwise the stale selection would silently reactivate the
+                        // moment the user lands back on a tab/state where it happens to
+                        // match again. Feeds back into the combine() above; settles within
+                        // one extra (cheap, idempotent) cycle since effectiveCategory ==
+                        // requestedCategory afterwards.
+                        _selectedCategory.value = result.effectiveCategory
+                    }
                     _uiState.update {
                         it.copy(
                             notifications = result.filtered,
                             availableCategories = result.availableCategories,
+                            selectedCategory = result.effectiveCategory,
                             // Monotonic: this is "has the cache flow ever delivered a real
                             // list", not "is the current list non-empty" - flips once, on
                             // the very first emission of either tab, and never resets. A
@@ -365,6 +390,8 @@ class NotificationsViewModel @Inject constructor(
 
     private data class FilteredNotifications(
         val filtered: List<AppNotification>,
-        val availableCategories: List<String>
+        val availableCategories: List<String>,
+        val requestedCategory: String?,
+        val effectiveCategory: String?
     )
 }

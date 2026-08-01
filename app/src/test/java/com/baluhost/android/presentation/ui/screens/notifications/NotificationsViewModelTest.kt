@@ -192,6 +192,56 @@ class NotificationsViewModelTest {
     }
 
     @Test
+    fun `switching tabs clears a category filter that does not occur in the new tab`() = runTest {
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(
+            listOf(notification(1, rawCategory = "raid"), notification(2, rawCategory = "smart"))
+        )
+        every { observeNotificationsUseCase(trashed = true) } returns flowOf(
+            listOf(notification(3, rawCategory = "backup"))
+        )
+
+        val vm = createViewModel()
+        vm.setCategory("raid")
+        assertEquals(listOf(1), vm.uiState.value.notifications.map { it.id })
+
+        vm.setTab(NotificationsViewModel.Tab.TRASH)
+
+        // "raid" doesn't occur in the trash tab's data - the filter must not survive
+        // into a context where its chip isn't offered: the list is the trash tab's
+        // real content (not spuriously empty because of a filter the user can no
+        // longer see or clear), and selectedCategory is coherent with the chips that
+        // would actually be rendered (availableCategories).
+        assertEquals(listOf(3), vm.uiState.value.notifications.map { it.id })
+        assertEquals(null, vm.uiState.value.selectedCategory)
+        assertEquals(listOf("backup"), vm.uiState.value.availableCategories)
+    }
+
+    @Test
+    fun `a category filter is cleared when its last matching row leaves the tab without a tab switch`() = runTest {
+        // This is why the fix lives in observeFilteredNotifications rather than only
+        // in setTab (the narrower repair that would restore the pre-regression
+        // behaviour): the same "empty list, no visible chip selected" symptom is also
+        // reachable by restoring the one remaining trash row of the selected category,
+        // with no tab switch involved at all. See Fix round 2 in task-10-report.md.
+        val trash = MutableStateFlow(
+            listOf(notification(1, rawCategory = "raid", deletedAt = "2026-08-01T11:00:00Z"))
+        )
+        every { observeNotificationsUseCase(trashed = false) } returns flowOf(emptyList())
+        every { observeNotificationsUseCase(trashed = true) } returns trash
+
+        val vm = createViewModel()
+        vm.setTab(NotificationsViewModel.Tab.TRASH)
+        vm.setCategory("raid")
+        assertEquals(listOf(1), vm.uiState.value.notifications.map { it.id })
+
+        // Simulate the cache reacting to a restore: the only "raid" row leaves the trash tab.
+        trash.value = emptyList()
+
+        assertEquals(null, vm.uiState.value.selectedCategory)
+        assertTrue(vm.uiState.value.availableCategories.isEmpty())
+    }
+
+    @Test
     fun `dismiss in the inbox lets the row disappear and appear in the trash`() = runTest {
         val inbox = MutableStateFlow(listOf(notification(1)))
         val trash = MutableStateFlow(emptyList<AppNotification>())
