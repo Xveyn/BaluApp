@@ -4,6 +4,8 @@ import android.util.Log
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.NotificationsApi
 import com.baluhost.android.data.remote.dto.NotificationDto
+import com.baluhost.android.data.repository.toEntity
+import com.baluhost.android.domain.repository.NotificationRepository
 import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
@@ -20,7 +22,8 @@ import javax.inject.Singleton
 class NotificationWebSocketManager @Inject constructor(
     @Named("websocket") private val okHttpClient: OkHttpClient,
     private val notificationsApi: NotificationsApi,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val notificationRepository: NotificationRepository
 ) {
     companion object {
         private const val TAG = "NotificationWS"
@@ -49,6 +52,12 @@ class NotificationWebSocketManager @Inject constructor(
     /** Increment unread count from external sources (e.g. FCM push). */
     fun incrementUnreadCount() {
         _unreadCount.value += 1
+    }
+
+    /** Cache a live notification. Internal so the socket listener and tests share one path. */
+    suspend fun persist(dto: NotificationDto) {
+        val owner = preferencesManager.getUserId().first() ?: return
+        notificationRepository.upsertFromPush(dto.toEntity(owner, source = "WEBSOCKET"))
     }
 
     suspend fun connect() {
@@ -128,7 +137,10 @@ class NotificationWebSocketManager @Inject constructor(
                     "notification" -> {
                         payload?.let {
                             val notification = gson.fromJson(it, NotificationDto::class.java)
-                            scope.launch { _latestNotification.emit(notification) }
+                            scope.launch {
+                                _latestNotification.emit(notification)
+                                persist(notification)
+                            }
                         }
                     }
                     "pong" -> {
