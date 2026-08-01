@@ -12,6 +12,7 @@ import coil.ImageLoaderFactory
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.worker.OfflineQueueWorkScheduler
 import com.baluhost.android.data.worker.SyncScheduleWorkScheduler
+import com.baluhost.android.domain.usecase.notification.SyncNotificationsUseCase
 import com.baluhost.android.util.ByteFormatter
 import com.baluhost.android.util.ByteUnitMode
 import dagger.hilt.android.HiltAndroidApp
@@ -44,11 +45,18 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
     @Inject
     lateinit var preferencesManager: PreferencesManager
 
+    @Inject
+    lateinit var syncNotificationsUseCase: SyncNotificationsUseCase
+
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    
+
     override fun onCreate() {
         super.onCreate()
-        
+
+        // A push may have landed while the app was dead. Reconciling here keeps the
+        // badge honest before the user opens anything.
+        CoroutineScope(Dispatchers.IO).launch { syncNotificationsUseCase() }
+
         // Schedule offline queue background workers
         OfflineQueueWorkScheduler.schedulePeriodicRetry(this)
         OfflineQueueWorkScheduler.scheduleDailyCleanup(this)

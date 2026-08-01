@@ -3,6 +3,7 @@ package com.baluhost.android.data.notification
 import com.baluhost.android.data.local.database.entities.NotificationEntity
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.repository.NotificationRepository
+import com.baluhost.android.domain.usecase.notification.SyncNotificationsUseCase
 import kotlinx.coroutines.flow.first
 import java.time.Instant
 import javax.inject.Inject
@@ -27,7 +28,8 @@ import javax.inject.Singleton
 @Singleton
 class PushNotificationStore @Inject constructor(
     private val repository: NotificationRepository,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val syncNotificationsUseCase: SyncNotificationsUseCase
 ) {
 
     /**
@@ -64,6 +66,12 @@ class PushNotificationStore @Inject constructor(
         )
 
         repository.upsertFromPush(entity)
+
+        // Best-effort reconcile: the server is typically unreachable in exactly the
+        // scenario this project exists for (push arrived while offline / app was
+        // dead), so any failure here must not undo the store above.
+        runCatching { syncNotificationsUseCase() }
+
         return true
     }
 }

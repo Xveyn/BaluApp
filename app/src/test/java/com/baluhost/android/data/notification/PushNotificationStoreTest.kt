@@ -3,6 +3,8 @@ package com.baluhost.android.data.notification
 import com.baluhost.android.data.local.database.entities.NotificationEntity
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.repository.NotificationRepository
+import com.baluhost.android.domain.usecase.notification.SyncNotificationsUseCase
+import com.baluhost.android.util.Result
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
@@ -21,6 +23,7 @@ class PushNotificationStoreTest {
 
     private lateinit var repository: NotificationRepository
     private lateinit var preferencesManager: PreferencesManager
+    private lateinit var syncNotificationsUseCase: SyncNotificationsUseCase
     private lateinit var store: PushNotificationStore
 
     private val receivedAt = Instant.parse("2026-08-01T12:00:00Z")
@@ -29,8 +32,10 @@ class PushNotificationStoreTest {
     fun setup() {
         repository = mockk(relaxed = true)
         preferencesManager = mockk(relaxed = true)
+        syncNotificationsUseCase = mockk()
         every { preferencesManager.getUserId() } returns flowOf(3)
-        store = PushNotificationStore(repository, preferencesManager)
+        coEvery { syncNotificationsUseCase() } returns Result.Success(Unit)
+        store = PushNotificationStore(repository, preferencesManager, syncNotificationsUseCase)
     }
 
     @Test
@@ -99,5 +104,31 @@ class PushNotificationStoreTest {
         )
 
         assertEquals("system", stored.captured.category)
+    }
+
+    @Test
+    fun `a failing background sync does not undo the store`() = runTest {
+        coEvery { repository.upsertFromPush(any()) } returns Unit
+        coEvery { syncNotificationsUseCase() } throws RuntimeException("server unreachable")
+
+        val result = store.store(
+            data = mapOf("notification_id" to "42", "category" to "raid"),
+            title = "t", body = "b", receivedAt = receivedAt
+        )
+
+        assertTrue(result)
+        coVerify(exactly = 1) { repository.upsertFromPush(any()) }
+    }
+
+    @Test
+    fun `a best-effort sync runs after a successful store`() = runTest {
+        coEvery { repository.upsertFromPush(any()) } returns Unit
+
+        store.store(
+            data = mapOf("notification_id" to "42", "category" to "raid"),
+            title = "t", body = "b", receivedAt = receivedAt
+        )
+
+        coVerify(exactly = 1) { syncNotificationsUseCase() }
     }
 }
