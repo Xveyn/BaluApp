@@ -31,7 +31,7 @@ import com.baluhost.android.domain.model.NasStatusResult
 import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.model.WolAvailability
 import com.baluhost.android.domain.model.DesktopState
-import com.baluhost.android.domain.usecase.plugin.IsGamingModeAvailableUseCase
+import com.baluhost.android.domain.usecase.plugin.GetGamingModeActionsUseCase
 import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
 import com.baluhost.android.domain.usecase.power.DisableDesktopUseCase
@@ -84,7 +84,7 @@ class DashboardViewModel @Inject constructor(
     private val getDesktopStatusUseCase: GetDesktopStatusUseCase,
     private val enableDesktopUseCase: EnableDesktopUseCase,
     private val disableDesktopUseCase: DisableDesktopUseCase,
-    private val isGamingModeAvailableUseCase: IsGamingModeAvailableUseCase,
+    private val getGamingModeActionsUseCase: GetGamingModeActionsUseCase,
     private val startGamingModeUseCase: StartGamingModeUseCase
 ) : ViewModel() {
     
@@ -597,7 +597,7 @@ class DashboardViewModel @Inject constructor(
             // admin-only server-side, so asking on anyone else's behalf could
             // only ever produce a 403; non-admins simply never get to see it.
             _gamingModeAvailable.value = if (_isAdmin.value) {
-                isGamingModeAvailableUseCase()
+                getGamingModeActionsUseCase().canStart
             } else {
                 false
             }

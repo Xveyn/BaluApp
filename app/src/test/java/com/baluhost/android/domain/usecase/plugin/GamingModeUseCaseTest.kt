@@ -36,6 +36,13 @@ class GamingModeUseCaseTest {
         )
     )
 
+    private val bothActionsPlugin = steamPlugin.copy(
+        menuItems = listOf(
+            PluginMenuItemDto(id = "gaming_mode"),
+            PluginMenuItemDto(id = "gaming_mode_end")
+        )
+    )
+
     @Before
     fun setup() {
         pluginApi = mockk()
@@ -43,39 +50,84 @@ class GamingModeUseCaseTest {
     }
 
     @Test
-    fun `available when the plugin contributes the gaming_mode action`() = runTest {
+    fun `the start action is offered when the plugin contributes it`() = runTest {
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(steamPlugin))
 
-        assertTrue(IsGamingModeAvailableUseCase(pluginApi, cache)())
+        assertTrue(GetGamingModeActionsUseCase(pluginApi, cache)().canStart)
     }
 
     @Test
-    fun `unavailable when the plugin is missing from the manifest`() = runTest {
+    fun `the end action alone is offered when the manifest names only it`() = runTest {
+        // Der Normalfall gegen einen Server ab BaluHost PR #500: das Manifest
+        // nennt genau eine Richtung, hier die Beenden-Richtung.
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(
+            listOf(steamPlugin.copy(menuItems = listOf(PluginMenuItemDto(id = "gaming_mode_end"))))
+        )
+
+        val actions = GetGamingModeActionsUseCase(pluginApi, cache)()
+
+        assertFalse(actions.canStart)
+        assertTrue(actions.canEnd)
+    }
+
+    @Test
+    fun `both actions are read off as-is when the manifest names both`() = runTest {
+        // Kein aktueller Server tut das, ein Stand zwischen #497 und #500 schon.
+        // Der UseCase liest ab, was dasteht, statt eine Exklusivität zu
+        // erzwingen, die er nicht prüfen kann.
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(bothActionsPlugin))
+
+        val actions = GetGamingModeActionsUseCase(pluginApi, cache)()
+
+        assertTrue(actions.canStart)
+        assertTrue(actions.canEnd)
+    }
+
+    @Test
+    fun `the end action is not offered while the manifest only has the start action`() = runTest {
+        // Ein Server vor PR #497 liefert genau das, ein Server ab #500 immer
+        // dann, wenn der Gaming-Modus gerade nicht läuft.
+        coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(steamPlugin))
+
+        assertFalse(GetGamingModeActionsUseCase(pluginApi, cache)().canEnd)
+    }
+
+    @Test
+    fun `no action is offered when the plugin is missing from the manifest`() = runTest {
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(emptyList())
 
-        assertFalse(IsGamingModeAvailableUseCase(pluginApi, cache)())
+        val actions = GetGamingModeActionsUseCase(pluginApi, cache)()
+
+        assertFalse(actions.canStart)
+        assertFalse(actions.canEnd)
     }
 
     @Test
-    fun `unavailable when the plugin no longer contributes the action`() = runTest {
+    fun `no action is offered when the plugin contributes no menu items`() = runTest {
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(
             listOf(steamPlugin.copy(menuItems = emptyList()))
         )
 
-        assertFalse(IsGamingModeAvailableUseCase(pluginApi, cache)())
+        val actions = GetGamingModeActionsUseCase(pluginApi, cache)()
+
+        assertFalse(actions.canStart)
+        assertFalse(actions.canEnd)
     }
 
     @Test
-    fun `unavailable when the manifest call fails`() = runTest {
+    fun `no action is offered when the manifest call fails`() = runTest {
         coEvery { pluginApi.getUiManifest() } throws RuntimeException("no network")
 
-        assertFalse(IsGamingModeAvailableUseCase(pluginApi, cache)())
+        val actions = GetGamingModeActionsUseCase(pluginApi, cache)()
+
+        assertFalse(actions.canStart)
+        assertFalse(actions.canEnd)
     }
 
     @Test
     fun `a refused action is reported with the German plugin string`() = runTest {
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(steamPlugin))
-        IsGamingModeAvailableUseCase(pluginApi, cache)()
+        GetGamingModeActionsUseCase(pluginApi, cache)()
         coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode") } returns
             PluginMenuActionResultDto(
                 ok = false,
@@ -94,7 +146,7 @@ class GamingModeUseCaseTest {
     @Test
     fun `a successful action returns the German plugin string`() = runTest {
         coEvery { pluginApi.getUiManifest() } returns PluginUiManifestDto(listOf(steamPlugin))
-        IsGamingModeAvailableUseCase(pluginApi, cache)()
+        GetGamingModeActionsUseCase(pluginApi, cache)()
         coEvery { pluginApi.runMenuAction("steam_gaming", "gaming_mode") } returns
             PluginMenuActionResultDto(
                 ok = true,

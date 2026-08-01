@@ -94,7 +94,7 @@ class DashboardViewModelVpnActionTest {
             getDesktopStatusUseCase = mockk(relaxed = true),
             enableDesktopUseCase = mockk(relaxed = true),
             disableDesktopUseCase = mockk(relaxed = true),
-            isGamingModeAvailableUseCase = mockk(relaxed = true),
+            getGamingModeActionsUseCase = mockk(relaxed = true),
             startGamingModeUseCase = mockk(relaxed = true)
         )
     }

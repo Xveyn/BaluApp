@@ -8,7 +8,7 @@ import com.baluhost.android.domain.model.DesktopActionResult
 import com.baluhost.android.domain.model.DesktopState
 import com.baluhost.android.domain.model.NasStatus
 import com.baluhost.android.domain.model.NasStatusResult
-import com.baluhost.android.domain.usecase.plugin.IsGamingModeAvailableUseCase
+import com.baluhost.android.domain.usecase.plugin.GetGamingModeActionsUseCase
 import com.baluhost.android.domain.usecase.plugin.StartGamingModeUseCase
 import com.baluhost.android.domain.model.PowerPermissions
 import com.baluhost.android.domain.usecase.power.CheckNasStatusUseCase
@@ -46,7 +46,7 @@ class DashboardViewModelDesktopActionTest {
     private lateinit var getDesktopStatusUseCase: GetDesktopStatusUseCase
     private lateinit var enableDesktopUseCase: EnableDesktopUseCase
     private lateinit var disableDesktopUseCase: DisableDesktopUseCase
-    private lateinit var isGamingModeAvailableUseCase: IsGamingModeAvailableUseCase
+    private lateinit var getGamingModeActionsUseCase: GetGamingModeActionsUseCase
     private lateinit var startGamingModeUseCase: StartGamingModeUseCase
     private lateinit var getMyPowerPermissionsUseCase: GetMyPowerPermissionsUseCase
     private lateinit var checkNasStatusUseCase: CheckNasStatusUseCase
@@ -59,7 +59,7 @@ class DashboardViewModelDesktopActionTest {
         getDesktopStatusUseCase = mockk()
         enableDesktopUseCase = mockk()
         disableDesktopUseCase = mockk()
-        isGamingModeAvailableUseCase = mockk()
+        getGamingModeActionsUseCase = mockk()
         startGamingModeUseCase = mockk()
         getMyPowerPermissionsUseCase = mockk()
         checkNasStatusUseCase = mockk()
@@ -73,7 +73,7 @@ class DashboardViewModelDesktopActionTest {
         every { notificationWebSocketManager.unreadCount } returns MutableStateFlow(0)
 
         coEvery { getDesktopStatusUseCase() } returns Result.Success(DesktopState.UNKNOWN)
-        coEvery { isGamingModeAvailableUseCase() } returns false
+        coEvery { getGamingModeActionsUseCase() } returns GetGamingModeActionsUseCase.GamingModeActions()
         // loadPowerPermissions() runs in the ViewModel's init block, so every
         // stub it depends on has to be in place before createViewModel().
         coEvery { getMyPowerPermissionsUseCase() } returns Result.Success(PowerPermissions())
@@ -121,7 +121,7 @@ class DashboardViewModelDesktopActionTest {
             getDesktopStatusUseCase = getDesktopStatusUseCase,
             enableDesktopUseCase = enableDesktopUseCase,
             disableDesktopUseCase = disableDesktopUseCase,
-            isGamingModeAvailableUseCase = isGamingModeAvailableUseCase,
+            getGamingModeActionsUseCase = getGamingModeActionsUseCase,
             startGamingModeUseCase = startGamingModeUseCase
         )
     }
@@ -183,7 +183,7 @@ class DashboardViewModelDesktopActionTest {
         vm.onPowerDialogOpened()
 
         coVerify(exactly = 0) { getDesktopStatusUseCase() }
-        coVerify(exactly = 0) { isGamingModeAvailableUseCase() }
+        coVerify(exactly = 0) { getGamingModeActionsUseCase() }
         clearViewModel(vm)
     }
 
@@ -216,14 +216,14 @@ class DashboardViewModelDesktopActionTest {
 
         vm.onPowerDialogOpened()
 
-        coVerify(exactly = 0) { isGamingModeAvailableUseCase() }
+        coVerify(exactly = 0) { getGamingModeActionsUseCase() }
         assertFalse(vm.gamingModeAvailable.value)
         clearViewModel(vm)
     }
 
     @Test
     fun `onPowerDialogOpened asks about gaming mode for an admin`() = runTest {
-        coEvery { isGamingModeAvailableUseCase() } returns true
+        coEvery { getGamingModeActionsUseCase() } returns GetGamingModeActionsUseCase.GamingModeActions(canStart = true)
         val vm = createViewModel()
 
         vm.onPowerDialogOpened()
