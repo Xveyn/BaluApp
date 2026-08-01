@@ -13,6 +13,7 @@ import com.baluhost.android.R
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import com.baluhost.android.data.notification.NotificationWebSocketManager
+import com.baluhost.android.data.notification.PushNotificationStore
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.util.NotificationIds
 import dagger.hilt.android.AndroidEntryPoint
@@ -20,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.time.Instant
 import javax.inject.Inject
 
 /**
@@ -51,7 +53,10 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject
     lateinit var notificationWebSocketManager: NotificationWebSocketManager
-    
+
+    @Inject
+    lateinit var pushNotificationStore: PushNotificationStore
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannels()
@@ -278,8 +283,12 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
         val notificationManager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         notificationManager.notify(NotificationIds.forNotification(notificationId), notificationCompat)
 
-        // Update in-app badge count
-        notificationWebSocketManager.incrementUnreadCount()
+        // Persist so the notification survives without a server connection.
+        // The unread badge now derives from the local table, so no separate
+        // counter has to be nudged here.
+        CoroutineScope(Dispatchers.IO).launch {
+            pushNotificationStore.store(data, title, body, Instant.now())
+        }
 
         Log.d(TAG, "Backend notification shown: $title (priority=$priority)")
     }
