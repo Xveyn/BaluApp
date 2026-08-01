@@ -460,6 +460,22 @@ class NotificationsViewModelTest {
     }
 
     @Test
+    fun `dismissAll does nothing in the trash tab`() = runTest {
+        // The screen only offers the action in the inbox, but the ViewModel is
+        // public API: dismissing what the trash shows would re-trash rows that
+        // are already there.
+        every { observeNotificationsUseCase(trashed = true) } returns flowOf(
+            listOf(notification(1, deletedAt = "2026-08-01T11:00:00Z"))
+        )
+        val vm = createViewModel()
+        vm.setTab(NotificationsViewModel.Tab.TRASH)
+
+        vm.dismissAll()
+
+        coVerify(exactly = 0) { notificationRepository.dismissLocally(any(), any()) }
+    }
+
+    @Test
     fun `retentionDays falls back to 7 when preferences cannot be loaded`() = runTest {
         coEvery { getNotificationPreferencesUseCase() } returns Result.Error(Exception("Server nicht erreichbar"))
 

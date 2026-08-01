@@ -316,6 +316,10 @@ class NotificationsViewModel @Inject constructor(
      */
     fun dismissAll() {
         viewModelScope.launch {
+            // The screen only offers the action in the inbox, but this is public
+            // API and the KDoc above promises inbox-only: dismissing what the
+            // trash tab shows would re-trash already-trashed rows.
+            if (_uiState.value.tab != Tab.INBOX) return@launch
             val ownerUserId = preferencesManager.getUserId().first() ?: return@launch
             _uiState.value.notifications.forEach {
                 notificationRepository.dismissLocally(ownerUserId, it.id)

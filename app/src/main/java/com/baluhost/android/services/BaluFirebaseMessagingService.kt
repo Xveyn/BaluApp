@@ -12,7 +12,6 @@ import com.baluhost.android.presentation.MainActivity
 import com.baluhost.android.R
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
-import com.baluhost.android.data.notification.NotificationWebSocketManager
 import com.baluhost.android.data.notification.PushNotificationStore
 import com.baluhost.android.data.remote.api.MobileApi
 import com.baluhost.android.domain.repository.NotificationRepository
@@ -51,9 +50,6 @@ class BaluFirebaseMessagingService : FirebaseMessagingService() {
 
     @Inject
     lateinit var mobileApi: MobileApi
-
-    @Inject
-    lateinit var notificationWebSocketManager: NotificationWebSocketManager
 
     @Inject
     lateinit var pushNotificationStore: PushNotificationStore

@@ -52,9 +52,6 @@ interface NotificationsApi {
     @POST("notifications/{id}/restore")
     suspend fun restore(@Path("id") id: Int): NotificationDto
 
-    @POST("notifications/dismiss-all")
-    suspend fun dismissAll(): MarkReadResponse
-
     @DELETE("notifications/{id}")
     suspend fun deletePermanently(@Path("id") id: Int)
 
